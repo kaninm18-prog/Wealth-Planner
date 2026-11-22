@@ -39,3 +39,11 @@ test('setupToken keeps an existing token', () => {
   const b = createBackend();
   assert.equal(b.context.setupToken(), 'test-token');
 });
+
+test('opening the URL in a browser (GET) says it is running and returns no data', () => {
+  const { context } = createBackend();
+  const res = JSON.parse(context.doGet({ parameter: { action: 'bootstrap' } }).getContent());
+  assert.ok(res.ok);
+  assert.match(res.message, /running/);
+  assert.deepEqual(Object.keys(res).sort(), ['message', 'ok']);
+});

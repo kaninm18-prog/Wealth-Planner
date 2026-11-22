@@ -17,6 +17,12 @@ function doPost(e) {
   }
 }
 
+// Opening the web-app URL in a browser is a GET. Answer that it's running, and nothing else:
+// no token arrives with a GET, so it must never return data.
+function doGet() {
+  return jsonResponse({ ok: true, message: "Wealth Planner backend is running. Use this URL in the app's Settings." });
+}
+
 function route(p) {
     switch (p.action) {
       case "bootstrap":              return bootstrap(p);
