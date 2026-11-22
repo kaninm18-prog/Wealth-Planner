@@ -26,6 +26,15 @@ function doGet() {
 function route(p) {
     switch (p.action) {
       case "bootstrap":              return bootstrap(p);
+      case "getHoldings":            return jsonResponse(holdingsData());
+      case "addHolding":             return addHolding(p);
+      case "updateHolding":          return updateHolding(p);
+      case "deleteHolding":          return deleteHolding(p);
+      case "addHoldingTxn":          return addHoldingTxn(p);
+      case "deleteHoldingTxn":       return deleteHoldingTxn(p);
+      case "refreshPrices":          return jsonResponse(refreshPrices());
+      case "setTargets":             return setTargets(p);
+      case "setBenchmark":           return setBenchmark(p);
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + p.action });
     }
@@ -33,5 +42,13 @@ function route(p) {
 
 // One round-trip startup: returns everything the app needs on open.
 function bootstrap(p) {
-  return jsonResponse({ ok: true, sheet: SpreadsheetApp.getActiveSpreadsheet().getName(), today: todayStr() });
+  _readCache = {};                                   // every tab is read once and shared by the getters
+  try {
+    var hld = holdingsData();
+    var pf  = portfolioMeta();
+  } finally { _readCache = null; }
+  var props = PropertiesService.getScriptProperties();
+  return jsonResponse({ ok: true, sheet: SpreadsheetApp.getActiveSpreadsheet().getName(), today: todayStr(),
+    holdings: hld, portfolio: pf,
+    prices: { last: props.getProperty("LAST_PRICE_REFRESH") || "", daily: !!props.getProperty("PRICES_DAILY") } });
 }
