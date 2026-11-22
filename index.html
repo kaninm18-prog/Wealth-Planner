@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1b1e2a">
+<meta name="color-scheme" content="light dark">
+<script>
+(function(){
+  var pref='auto';
+  try { pref = localStorage.getItem('wealthThemePref') || 'auto'; } catch(e) {}
+  var dark = pref==='dark' || (pref==='auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  var m=document.querySelector('meta[name="theme-color"]'); if (m) m.content = dark ? '#0d0e12' : '#1b1e2a';
+})();
+</script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wealth Planner">
+<title>Wealth Planner</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ══ Setup Screen ══ -->
+<div id="setup-screen">
+  <div style="font-size:3.2rem;margin-bottom:10px">📈</div>
+  <h1>Wealth Planner</h1>
+  <p>Investments and assets — powered by Google Sheets</p>
+  <div class="setup-card">
+    <ol class="setup-steps">
+      <li>Open the Wealth Planner Apps Script project</li>
+      <li>Run <code>setupToken</code> once (Run ▶) and copy the token from the Execution log</li>
+      <li>Deploy → Manage deployments → copy the Web app URL</li>
+    </ol>
+    <label>Paste your Apps Script Web App URL</label>
+    <input type="url" id="script-url-input" placeholder="https://script.google.com/macros/s/...">
+    <label style="margin-top:10px">Access token</label>
+    <input type="password" id="script-token-input" placeholder="Token from setupToken()" autocomplete="off">
+    <button class="setup-btn" onclick="saveScriptUrl()">Connect & Start →</button>
+  </div>
+</div>
+
+<!-- ══ Main App ══ -->
+<div id="app" style="display:none">
+  <div class="header">
+    <div class="header-top">
+      <div class="header-title">📈 Wealth Planner</div>
+      <div style="display:flex;gap:8px">
+        <button class="header-settings-btn" onclick="openSettings()" aria-label="Settings">⚙️</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin:16px">
+    <div class="card-title">Coming next</div>
+    <div class="balance-mode-desc" id="home-status">Connecting…</div>
+    <div class="balance-mode-desc" style="margin-top:8px">Holdings, prices, dividends and the trading journal move here from Money Tracker in the next step.</div>
+  </div>
+</div>
+
+<!-- ══ Settings Modal ══ -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Settings</div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Script Connection</div>
+      <div class="form-group">
+        <label class="form-label">Web App URL</label>
+        <input type="url" class="form-control" id="settings-url">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Access token</label>
+        <input type="password" class="form-control" id="settings-token" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" onclick="updateScriptUrl()">Save</button>
+    </div>
+    <div class="balance-mode-desc" id="app-version" style="text-align:center;margin-top:10px"></div>
+    <div style="height:10px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Close</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/core.js"></script>
+</body>
+</html>
