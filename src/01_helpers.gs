@@ -12,6 +12,7 @@ function getSheet(name) {
       sh.appendRow(HEADERS[name]);
       sh.getRange(1, 1, 1, HEADERS[name].length).setFontWeight("bold");
     }
+    if (HIDDEN_TABS[name]) sh.hideSheet();
   }
   _sheetMemo[name] = sh;
   return sh;
@@ -36,6 +37,15 @@ function formatDate(val) {
 
 function todayStr() {
   return Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+}
+
+function addMonths(dateStr, n) {
+  if (!dateStr || dateStr.length < 10) return dateStr;
+  var y = parseInt(dateStr.substring(0, 4));
+  var m = parseInt(dateStr.substring(5, 7)) - 1; // 0-indexed
+  var d = parseInt(dateStr.substring(8, 10));
+  var dt = new Date(y, m + n, d);
+  return Utilities.formatDate(dt, "GMT+7", "yyyy-MM-dd");
 }
 
 function toFloat(v) { return parseFloat(v) || 0; }
@@ -70,6 +80,8 @@ function tokenError(p) {
 // Edits and deletes find their row by Id, so a row that moved (because something was
 // deleted on another device) is still the one that gets changed. ID_COL[tab] = Id column.
 var ID_COL = {};
+ID_COL[SHEET.HOLDINGS]     = 1;
+ID_COL[SHEET.HOLDING_TXNS] = 1;
 
 function newId(prefix) { return prefix + Utilities.getUuid().replace(/-/g, "").slice(0, 10); }
 
