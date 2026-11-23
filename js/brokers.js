@@ -70,6 +70,7 @@ function openBroker(name) {
   document.getElementById('bk-rate').value = b && cur !== 'THB' && b.rate ? b.rate : (cur !== 'THB' ? suggestRate(cur) : '');
   document.getElementById('bk-divto').value = b ? b.dividendsTo : '';
   document.getElementById('bk-note').value = b ? b.note : '';
+  document.getElementById('bk-opening').value = b && b.opening ? b.opening : '';
   document.getElementById('bk-body').innerHTML = b ? brokerDetailHtml(b) : '';
   document.getElementById('bk-delete').style.display = b && b.saved ? '' : 'none';
   document.getElementById('bk-save').textContent = b && !b.saved ? 'Save broker settings' : 'Save';
@@ -84,7 +85,7 @@ function brokerDetailHtml(b) {
     ['Holdings', f(b.holdings), c !== 'THB' ? '≈ ' + fmtMoney(b.holdingsThb) : 'market value'],
     ['Dividends to', recEsc(b.dividendsTo || 'this broker'), b.dividendsTo ? 'a bank account in Money Tracker' : 'into its cash']
   ];
-  var rows = [['Deposits (from Money Tracker)', b.deposits], ['Withdrawals', b.withdrawals], ['Bought', -b.buys], ['Sold', b.sells],
+  var rows = [['Opening cash', b.opening || 0], ['Deposits (from Money Tracker)', b.deposits], ['Withdrawals', b.withdrawals], ['Bought', -b.buys], ['Sold', b.sells],
     ['Fees', -b.fees], ['Dividends', b.dividends], ['Closed trades', b.trades]];
   var html = '<div class="hd-grid">' + stats.map(function(x) {
     return '<div class="hd-stat"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div>' + (x[2] ? '<div class="s">' + x[2] + '</div>' : '') + '</div>';
@@ -124,7 +125,8 @@ function saveBroker() {
     if (n && !confirm(n + ' dividend' + (n > 1 ? 's' : '') + ' already saved at ' + name + ' will also count as paid to ' + (to || 'the broker') + ' (in Money Tracker too). Continue?')) return;
   }
   var btn = document.getElementById('bk-save'); btn.textContent = 'Saving…'; btn.disabled = true;
-  api({ action: 'setBroker', name: name, currency: cur, rate: cur === 'THB' ? 1 : rate, dividendsTo: to, note: document.getElementById('bk-note').value.trim() }).then(function(res) {
+  api({ action: 'setBroker', name: name, currency: cur, rate: cur === 'THB' ? 1 : rate, dividendsTo: to, note: document.getElementById('bk-note').value.trim(),
+    openingCash: parseFloat(document.getElementById('bk-opening').value) || 0 }).then(function(res) {
     btn.disabled = false; btn.textContent = 'Save';
     if (!res.ok) { apiError(res); return; }
     closeModal('broker-modal');

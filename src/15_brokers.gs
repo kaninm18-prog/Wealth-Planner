@@ -4,7 +4,8 @@
 //  • Money Tracker writes every transfer into / out of a linked account to its tab _Export_LinkedFlows.
 //    This file reads it (spreadsheet id in the Script Property MONEY_SHEET_ID) as the broker's deposits.
 //  • Broker cash, in the broker's own currency =
-//      deposits − withdrawals − buys + sells − fees + dividends paid to the broker + closed trades' net.
+//      opening cash + deposits − withdrawals − buys + sells − fees + dividends paid to the broker + closed trades' net.
+//    Opening cash (Brokers tab) is what was already at the broker when it was set up here.
 //    Buys and sells only move cash between the broker's cash and a holding: they are not spending or income.
 //  • _Export_Values: each broker's cash + the market value of what is held there; plus one "Other assets"
 //    row (C7) for entries with no broker (a car, a house…). Money Tracker shows it as the account balance.
@@ -26,7 +27,7 @@ function brokerRows() {
   return sheetToRows(getSheet(SHEET.BROKERS), function(d, ri) {
     var cur = String(d[1] || "").trim().toUpperCase() || "THB";
     return { rowIndex: ri, name: String(d[0] || "").trim(), currency: cur, dividendsTo: String(d[2] || "").trim(),
-      rate: cur === "THB" ? 1 : toFloat(d[3]), note: String(d[4] || "") };
+      rate: cur === "THB" ? 1 : toFloat(d[3]), note: String(d[4] || ""), opening: toFloat(d[5]) };
   }).filter(function(b){ return b.name; });
 }
 
@@ -44,19 +45,22 @@ function setBroker(p) {
   var to = String(p.dividendsTo || "").trim();
   if (to === name) to = "";                       // "paid to itself" = paid into the broker's cash
   var sh = getSheet(SHEET.BROKERS), row = resolveRow(SHEET.BROKERS, { id: name, rowIndex: p.rowIndex });
-  var old = row ? sh.getRange(row, 1, 1, 5).getValues()[0] : null;
+  ensureHeaders(sh, 6, ["OpeningCash"]);              // tabs made before the column existed
+  var old = row ? sh.getRange(row, 1, 1, 6).getValues()[0] : null;
   var oldCur = old ? (String(old[1] || "").trim().toUpperCase() || "THB") : "";
   // a typed rate wins; otherwise keep the saved one while the currency stays the same
   var rate = cur === "THB" ? 1 : (toFloat(p.rate) > 0 ? toFloat(p.rate) : (old && oldCur === cur ? toFloat(old[3]) : 0));
-  var vals = [name, cur, to, rate || "", String(p.note === undefined ? (old ? old[4] : "") : p.note)];
+  // opening cash: kept when not sent (an older app), so saving never wipes it
+  var opening = p.openingCash === undefined || p.openingCash === null ? (old ? toFloat(old[5]) : 0) : toFloat(p.openingCash);
+  var vals = [name, cur, to, rate || "", String(p.note === undefined ? (old ? old[4] : "") : p.note), opening || ""];
   // Dividends already saved follow the new setting (Money Tracker moves their Income rows): say how many.
   var oldTo = old ? String(old[2] || "").trim() : "";
   var moved = to === oldTo ? 0 : holdingTxnRows().filter(function(t) {
     return t.type === "dividend" && t.account === name && EXPORT_DIVIDEND_ID.test(t.id);
   }).length;
   if (!row) row = sh.getLastRow() + 1;
-  sh.getRange(row, 1, 1, 5).setNumberFormats([["@", "@", "@", "0.0000", "@"]]);
-  sh.getRange(row, 1, 1, 5).setValues([vals]);
+  sh.getRange(row, 1, 1, 6).setNumberFormats([["@", "@", "@", "0.0000", "@", "0.00"]]);
+  sh.getRange(row, 1, 1, 6).setValues([vals]);
   return jsonResponse({ ok: true, name: name, added: !old, dividendsMoved: moved, needsRate: cur !== "THB" && !rate });
 }
 
@@ -149,7 +153,7 @@ function brokerLedger() {
     saved.forEach(function(b){ if (b.name === name) s = b; });
     var b = by[name] = { name: name, saved: !!s, rowIndex: s ? s.rowIndex : 0, currency: s ? s.currency : "THB",
       rate: s ? s.rate : 1, dividendsTo: s ? s.dividendsTo : "", note: s ? s.note : "",
-      deposits: 0, withdrawals: 0, buys: 0, sells: 0, fees: 0, dividends: 0, dividendsElsewhere: 0, trades: 0,
+      opening: s ? s.opening : 0, deposits: 0, withdrawals: 0, buys: 0, sells: 0, fees: 0, dividends: 0, dividendsElsewhere: 0, trades: 0,
       qty: {}, warnings: [], unknown: false };
     list.push(b);
     return b;
@@ -259,11 +263,11 @@ function brokerLedger() {
     var pos = positions(b.name);
     if (b.currency !== "THB" && !(b.rate > 0)) { b.unknown = true; warn(b, "No exchange rate for " + b.currency + " yet — refresh prices or type the rate"); }
     var R = b.rate > 0 ? b.rate : 0;
-    var cash = b.deposits + b.withdrawals - b.buys + b.sells - b.fees + b.dividends + b.trades;
+    var cash = b.opening + b.deposits + b.withdrawals - b.buys + b.sells - b.fees + b.dividends + b.trades;
     var held = R ? pos.thb / R : 0, value = cash + held;
     check.cashThb += cash * R; check.rowsThb += value * R;
     return { name: b.name, saved: b.saved, rowIndex: b.rowIndex, currency: b.currency, rate: b.rate, dividendsTo: b.dividendsTo, note: b.note,
-      deposits: round2(b.deposits), withdrawals: round2(b.withdrawals), buys: round2(b.buys), sells: round2(b.sells), fees: round2(b.fees),
+      opening: round2(b.opening), deposits: round2(b.deposits), withdrawals: round2(b.withdrawals), buys: round2(b.buys), sells: round2(b.sells), fees: round2(b.fees),
       dividends: round2(b.dividends), dividendsElsewhere: round2(b.dividendsElsewhere), trades: round2(b.trades),
       cash: round2(cash), cashThb: round2(cash * R), holdings: round2(held), holdingsThb: round2(pos.thb),
       value: round2(value), valueThb: round2(value * R), unknown: b.unknown, warnings: b.warnings, positions: pos.list };
