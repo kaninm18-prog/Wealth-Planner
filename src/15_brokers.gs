@@ -199,14 +199,45 @@ function brokerLedger() {
       b.withdrawals += conv(b, flows.totals[name][cur][1], cur);
     });
   });
-  // Quantity of each holding at each broker ("" = no broker) from that broker's own buys and sells
-  var qtyAt = {};
-  txns.forEach(function(t) {
-    if (t.type !== "buy" && t.type !== "sell") return;
-    var q = qtyAt[t.holdingId] || (qtyAt[t.holdingId] = {}), k = t.account || "";
-    q[k] = (q[k] || 0) + (t.type === "buy" ? t.quantity : -t.quantity);
-    if (k) broker(k);
-  });
+  // Quantity of each holding at each broker ("" = no broker), entry by entry in date order. No slice ever
+  // goes below 0. Agreed rules for entries with no broker (a gold bar taken out of MTS Gold, no cash moves):
+  //  • a no-broker sell of a holding held at exactly one broker comes out of that broker's position;
+  //  • a no-broker buy of a holding held at exactly one broker goes into that broker's position;
+  //  • held at more than one broker: it stays in the no-broker slice, and those brokers get a warning.
+  // A sell bigger than its slice takes the rest from the no-broker slice, then from the other brokers
+  // in proportion to what they hold, with a warning (so no slice is negative and the totals still add up).
+  var qtyAt = {}, MOVED = "Moved without a broker — check where it is held";
+  function heldAt(q) { return Object.keys(q).filter(function(k){ return k && q[k] > 1e-9; }); }
+  function take(q, k, n) {                              // take n out of slice k; returns the slices that gave
+    var got = Math.min(n, Math.max(q[k] || 0, 0)), from = [];
+    if (got > 0) { q[k] -= got; n -= got; }
+    if (n > 1e-9 && k !== "" && (q[""] || 0) > 1e-9) { var o = Math.min(n, q[""]); q[""] -= o; n -= o; from.push(""); }
+    var others = heldAt(q).filter(function(x){ return x !== k; }), tot = 0;
+    others.forEach(function(x){ tot += q[x]; });
+    if (n > 1e-9 && tot > 1e-9) {
+      var part = Math.min(n, tot);
+      others.forEach(function(x){ q[x] -= part * q[x] / tot; from.push(x); });
+      n -= part;
+    }
+    if (n > 1e-9) q[k] = (q[k] || 0) - n;               // only with bad data: sold more than was ever held
+    return from;
+  }
+  txns.filter(function(t){ return t.type === "buy" || t.type === "sell"; })
+    .sort(function(a, b){ return a.date === b.date ? a.rowIndex - b.rowIndex : a.date.localeCompare(b.date); })
+    .forEach(function(t) {
+      var q = qtyAt[t.holdingId] || (qtyAt[t.holdingId] = {}), k = t.account || "";
+      if (k) broker(k);
+      if (!k) {
+        var at = heldAt(q);
+        if (at.length === 1) k = at[0];                // moved into / out of that broker, no cash
+        else if (at.length > 1) at.forEach(function(x){ warn(broker(x), MOVED); });
+      }
+      if (t.type === "buy") { q[k] = (q[k] || 0) + t.quantity; return; }
+      var from = take(q, k, t.quantity);
+      if (from.length && t.account) warn(broker(t.account), "More sold here than bought here — the rest was taken from " +
+        from.map(function(x){ return x || OTHER_ASSETS; }).join(", "));
+      from.forEach(function(x){ if (x && x !== t.account) warn(broker(x), MOVED); });
+    });
   // Market value of a slice of a holding: its share of the holding's value (qty × price, or cost when unpriced)
   function positions(key) {
     var out = [], thb = 0;
@@ -226,7 +257,6 @@ function brokerLedger() {
   list.sort(function(a, b){ return a.name.toLowerCase().localeCompare(b.name.toLowerCase()); });
   var brokers = list.map(function(b) {
     var pos = positions(b.name);
-    if (pos.list.some(function(x){ return x.quantity < 0; })) warn(b, "More sold here than bought here");
     if (b.currency !== "THB" && !(b.rate > 0)) { b.unknown = true; warn(b, "No exchange rate for " + b.currency + " yet — refresh prices or type the rate"); }
     var R = b.rate > 0 ? b.rate : 0;
     var cash = b.deposits + b.withdrawals - b.buys + b.sells - b.fees + b.dividends + b.trades;

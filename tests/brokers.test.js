@@ -419,3 +419,68 @@ test('reads only: the Money Tracker sheet is opened, never written', () => {
   assert.equal(JSON.stringify(b.money.sheets), before);
   assert.ok(b.money.opened >= 2);
 });
+
+// ── Moving a holding out of / into a broker with no account (agreed rule, review of #5) ──
+const allSlices = L => L.brokers.flatMap(x => x.positions).concat(L.other.positions);
+function noNegative(L) { allSlices(L).forEach(p => assert.ok(p.quantity >= 0, `${p.name} has ${p.quantity} in a slice`)); }
+
+test('MTS case: a gold bar withdrawn (no-broker sell) leaves the broker; the bar is an Other asset', () => {
+  const b = setup();
+  b.api({ action: 'setBroker', name: 'MTS Gold' });
+  b.money.setFlows([['T1', '2026-11-01', 'MTS Gold', 90000, 'THB']]);
+  b.buy('MTS gold', 'gold', 2, 42000, 'MTS Gold', '2026-11-02');                     // baht-weight
+  b.txn('sell', 'MTS gold', { quantity: 2, price: 42000, account: '', date: '2026-11-10' });   // bar withdrawn: no cash moves
+  b.buy('Gold bar', 'gold', 1, 84000, '', '2026-11-10');
+  const L = b.ledger(), mts = L.brokers.find(x => x.name === 'MTS Gold');
+  assert.deepEqual(plain(mts.positions), [], 'no phantom position at the broker');
+  near(mts.cash, 6000); near(mts.value, 6000, 'value = cash only');
+  near(mts.sells, 0, 'the withdrawal is not cash');
+  near(L.other.value, 84000, 'Other assets = the bar');
+  assert.deepEqual(plain(L.other.positions).map(p => [p.name, p.quantity]), [['Gold bar', 1]]);
+  near(L.check.diff, 0); noNegative(L);
+  assert.deepEqual(mts.warnings, []);
+  assert.deepEqual(b.valueRow('MTS Gold'), ['MTS Gold', 'THB', 6000, 6000, TODAY]);
+  assert.deepEqual(b.valueRow('Other assets'), ['Other assets', 'THB', 84000, 84000, TODAY]);
+});
+
+test('a partial withdrawal comes out of the one broker; a no-broker buy of something held at one broker goes into it', () => {
+  const b = setup();
+  b.money.setFlows([['T1', '2026-11-01', 'MTS Gold', 300000, 'THB']]);
+  b.buy('MTS gold', 'gold', 5, 42000, 'MTS Gold', '2026-11-02');
+  b.txn('sell', 'MTS gold', { quantity: 2, price: 42000, account: '', date: '2026-11-10' });
+  let L = b.ledger(), mts = L.brokers.find(x => x.name === 'MTS Gold');
+  assert.deepEqual(plain(mts.positions).map(p => [p.name, p.quantity, p.valueThb]), [['MTS gold', 3, 126000]]);
+  assert.deepEqual(plain(L.other.positions), []);
+  near(mts.cash, 300000 - 210000);
+  b.buy('MTS gold', 'gold', 1, 43000, '', '2026-11-12');                             // brought back in, no cash
+  L = b.ledger(); mts = L.brokers.find(x => x.name === 'MTS Gold');
+  assert.deepEqual(plain(mts.positions).map(p => [p.name, p.quantity, p.valueThb]), [['MTS gold', 4, 172000]]);
+  near(mts.cash, 90000); near(L.check.diff, 0); noNegative(L);
+  // order is by date, not by when the entry was typed
+  b.buy('Coin', 'gold', 1, 1000, 'MTS Gold', '2026-11-01');
+  b.buy('Coin', 'gold', 1, 1000, '', '2026-10-01');                                  // typed later, but owned before any broker held it
+  L = b.ledger();
+  assert.deepEqual(plain(L.other.positions).map(p => [p.name, p.quantity]), [['Coin', 1]]);
+  near(L.check.diff, 0);
+});
+
+test('held at more than one broker: a no-broker move is not guessed — it stays without a broker, both brokers are warned, nothing goes negative', () => {
+  const b = setup();
+  b.api({ action: 'setBroker', name: 'A' }); b.api({ action: 'setBroker', name: 'B' });
+  b.buy('PTT', 'stock', 20, 30, 'A', '2026-11-02');
+  b.buy('PTT', 'stock', 30, 30, 'B', '2026-11-02');
+  b.buy('PTT', 'stock', 5, 30, '', '2026-11-03');                                    // no-broker buy
+  let L = b.ledger();
+  const slices = () => Object.fromEntries([...L.brokers.map(x => [x.name, (x.positions[0] || {}).quantity || 0]), ['other', (L.other.positions[0] || {}).quantity || 0]]);
+  assert.deepEqual(slices(), { A: 20, B: 30, other: 5 });
+  ['A', 'B'].forEach(n => assert.match(L.brokers.find(x => x.name === n).warnings.join(), /Moved without a broker — check where it is held/));
+  b.txn('sell', 'PTT', { quantity: 3, price: 30, account: '', date: '2026-11-04' });   // from the no-broker slice
+  L = b.ledger();
+  assert.deepEqual(slices(), { A: 20, B: 30, other: 2 });
+  b.txn('sell', 'PTT', { quantity: 12, price: 30, account: '', date: '2026-11-05' });  // more than it holds: the rest from A and B
+  L = b.ledger();
+  const s = slices();
+  near(s.other, 0); near(s.A, 20 - 10 * 20 / 50); near(s.B, 30 - 10 * 30 / 50);
+  noNegative(L); near(L.check.diff, 0);
+  near(L.brokers.find(x => x.name === 'A').sells, 0, 'no cash moves on a no-broker entry');
+});

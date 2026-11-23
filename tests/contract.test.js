@@ -105,10 +105,12 @@ test('round trip through Money Tracker\'s real code: flows â†’ Wealth Planner â†
   mt.api({ action: 'addAccount', name: 'KS', type: 'investment', startingBalance: 0, linkedTo: 'Kasikorn Securities' });
   mt.api({ action: 'addAccount', name: 'IB', type: 'investment', startingBalance: 0, currency: 'USD', rate: 35, linkedTo: 'IBKR' });
   mt.api({ action: 'addAccount', name: 'Assets', type: 'investment', startingBalance: 0, linkedTo: 'Other assets' });
+  mt.api({ action: 'addAccount', name: 'MTS', type: 'investment', startingBalance: 0, linkedTo: 'MTS Gold' });
   mt.props.WEALTH_SHEET_ID = mtHarness.WEALTH_ID;
   mt.api({ action: 'addTransfer', date: '2026-11-01', amount: 50000, fromAccount: 'Bank', toAccount: 'KS', id: 'T1' });
   mt.api({ action: 'addTransfer', date: '2026-11-01', amount: 3500, fromAccount: 'Bank', toAccount: 'IB', receivedAmount: 100, id: 'T2' });
   mt.api({ action: 'addTransfer', date: '2026-11-02', amount: 5000, fromAccount: 'KS', toAccount: 'IB', receivedAmount: 140, id: 'T3' });   // linked â†’ linked (C1)
+  mt.api({ action: 'addTransfer', date: '2026-11-01', amount: 90000, fromAccount: 'Bank', toAccount: 'MTS', id: 'T4' });
   mt.api({ action: 'bootstrap', month: 11, year: 2026 });              // writes _Export_LinkedFlows
   const totalBefore = mt.api({ action: 'getAccounts' }).totalBalance;
 
@@ -126,7 +128,12 @@ test('round trip through Money Tracker\'s real code: flows â†’ Wealth Planner â†
   wp.api({ action: 'addHoldingTxn', type: 'dividend', holdingId: ptt.holdingId, amount: 900, tax: 100, account: 'Kasikorn Securities', date: '2026-11-10' });
   wp.api({ action: 'addHoldingTxn', type: 'dividend', holdingId: aapl.holdingId, amount: 70, origAmount: 2, currency: 'USD', tax: 10.5, taxOrig: 0.3,
     account: 'IBKR', date: '2026-11-11' });
+  // MTS gold: 2 baht-weight bought at the broker, then withdrawn as a bar (a sell with no account, no cash)
+  const mg = wp.api({ action: 'addHoldingTxn', type: 'buy', holding: { name: 'MTS gold', kind: 'gold' }, quantity: 2, price: 42000, account: 'MTS Gold', date: '2026-11-02' });
+  wp.api({ action: 'addHoldingTxn', type: 'sell', holdingId: mg.holdingId, quantity: 2, price: 42000, account: '', date: '2026-11-10' });
+  wp.api({ action: 'addHoldingTxn', type: 'buy', holding: { name: 'Gold bar', kind: 'gold' }, quantity: 1, price: 84000, account: '', date: '2026-11-10' });
   const L = wp.api({ action: 'bootstrap' }).brokers;
+  near(L.check.diff, 0);
   near(L.brokers.find(x => x.name === 'Kasikorn Securities').deposits, 50000);
   near(L.brokers.find(x => x.name === 'Kasikorn Securities').withdrawals, -5000, 'T3 out of KS');
   near(L.brokers.find(x => x.name === 'IBKR').deposits, 240, 'T2 + T3 into IB (same Id T3 on two accounts)');
@@ -141,8 +148,9 @@ test('round trip through Money Tracker\'s real code: flows â†’ Wealth Planner â†
   near(ks.balance, 50000 - 5000 - 30000 - 50 + 30000, 'cash + PTT; the dividend went to Bank');
   near(ib.balance, 240 - 50 - 1 + 2 + 50, 'USD cash + AAPL in USD');
   near(ib.balanceThb, ib.balance * 35);
-  near(assets.balance, 500000, 'Other assets (C7)');
-  near(bank.balance, 100000 - 50000 - 3500 + 900, 'the bank got the PTT dividend as Income');
+  near(assets.balance, 500000 + 84000, 'Other assets (C7): the car and the withdrawn gold bar');
+  near(acc('MTS').balance, 90000 - 84000, 'MTS Gold: cash only, no phantom gold');
+  near(bank.balance, 100000 - 50000 - 3500 - 90000 + 900, 'the bank got the PTT dividend as Income');
   const income = plain(mt.sheets.Income.rows.slice(1)).filter(r => /^WD/.test(r[7]));
   assert.deepEqual(income.map(r => [r[0], r[1], r[3], r[4], r[5], r[6]]), [
     ['2026-11-10', 900, 'Dividend Â· PTT', 'Bank', '', ''],
@@ -150,5 +158,6 @@ test('round trip through Money Tracker\'s real code: flows â†’ Wealth Planner â†
   ]);
   // Net worth: what moved since the transfers is only fees, dividends, the exchange-rate difference on T3 and the car
   const totalAfter = mt.api({ action: 'getAccounts' }).totalBalance;
-  near(totalAfter - totalBefore, -50 - 35 + 900 + 70 + 500000);
+  near(totalAfter - totalBefore, -50 - 35 + 900 + 70 + 500000,
+    'the MTS gold only moved from the broker to Other assets (90000 transferred = 6000 cash + 84000 bar): no change');
 });
