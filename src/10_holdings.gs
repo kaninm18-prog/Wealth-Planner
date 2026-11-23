@@ -4,7 +4,7 @@
 // Buying/selling moves cash between a broker's cash and the holding; it is NOT spending or income.
 // Unlike Money Tracker, fees and dividends are NOT copied into Expenses/Income (plan D2/D3):
 // a fee stays in the HoldingTxns Fee column, a dividend stays a "dividend" row (tax withheld in Fee).
-// Account is the broker's name; broker cash balances come later (step 3d).
+// Account is the broker's name; its cash and value are worked out in src/15_brokers.gs (step 3d).
 // Cost basis uses the average-cost method.
 var HOLDING_KINDS = { gold: "investment", stock: "investment", etf: "investment", fund: "investment",
   crypto: "investment", bond: "investment", property: "asset", vehicle: "asset", electronics: "asset", other: "asset" };

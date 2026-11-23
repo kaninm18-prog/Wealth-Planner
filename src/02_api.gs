@@ -23,7 +23,17 @@ function doGet() {
   return jsonResponse({ ok: true, message: "Wealth Planner backend is running. Use this URL in the app's Settings." });
 }
 
+// Writes that change what Money Tracker reads: the export tabs are rebuilt after each of them (plan section 3).
+var EXPORT_AFTER = { addHolding: 1, updateHolding: 1, deleteHolding: 1, addHoldingTxn: 1, deleteHoldingTxn: 1, refreshPrices: 1,
+  addTrade: 1, deleteTrade: 1, importTrades: 1, importPack: 1, setBroker: 1, deleteBroker: 1 };
+
 function route(p) {
+  var res = dispatch(p);
+  if (EXPORT_AFTER[p.action]) exportsSafe();      // a failed export never undoes the save; bootstrap reports it
+  return res;
+}
+
+function dispatch(p) {
     switch (p.action) {
       case "bootstrap":              return bootstrap(p);
       case "getHoldings":            return jsonResponse(holdingsData());
@@ -40,6 +50,9 @@ function route(p) {
       case "deleteTrade":            return deleteTrade(p);
       case "importTrades":           return importTrades(p);
       case "importPack":             return importPack(p);
+      case "getBrokers":             return jsonResponse(getBrokers());
+      case "setBroker":              return setBroker(p);
+      case "deleteBroker":           return deleteBroker(p);
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + p.action });
     }
@@ -53,8 +66,11 @@ function bootstrap(p) {
     var pf  = portfolioMeta();
     var tr  = getTrades().trades;
   } finally { _readCache = null; }
+  var ex = exportsSafe();                          // also gives the broker cash ledger
+  var brokers = ex.ok ? ex.ledger : { ok: false, error: ex.error };
+  brokers.exported = ex.ok ? { values: ex.values, dividends: ex.dividends, asOf: ex.asOf } : null;
   var props = PropertiesService.getScriptProperties();
   return jsonResponse({ ok: true, sheet: SpreadsheetApp.getActiveSpreadsheet().getName(), today: todayStr(),
-    holdings: hld, portfolio: pf, trades: tr,
+    holdings: hld, portfolio: pf, trades: tr, brokers: brokers,
     prices: { last: props.getProperty("LAST_PRICE_REFRESH") || "", daily: !!props.getProperty("PRICES_DAILY") } });
 }

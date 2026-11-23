@@ -119,13 +119,16 @@ test('dividends: tax withheld is recorded in Fee; quantity unchanged; a dividend
   assert.equal(noAcc.ok, false, 'a dividend needs an account');
 });
 
-test('fees and dividends write to no tab other than Holdings and HoldingTxns', () => {
+test('fees and dividends write no Expenses or Income: only Holdings, HoldingTxns and the export tabs (step 3d)', () => {
   const { api, sheets, buyNew } = setup();
   const r = buyNew('PTT', 'stock', 100, 30, 'Broker', '2026-01-10', { fee: 15, origAmount: 90, currency: 'USD', feeOrig: 0.45 });
   api({ action: 'addHoldingTxn', type: 'sell', holdingId: r.holdingId, quantity: 10, price: 35, fee: 5, account: 'Broker', date: '2026-01-20' });
   api({ action: 'addHoldingTxn', type: 'dividend', holdingId: r.holdingId, amount: 90, tax: 10, account: 'Broker', date: '2026-04-20',
     origAmount: 2.5, currency: 'USD' });
-  assert.deepEqual(Object.keys(sheets).sort(), ['HoldingTxns', 'Holdings']);
+  assert.deepEqual(Object.keys(sheets).sort(), ['Brokers', 'HoldingTxns', 'Holdings', 'Trades', '_Export_Dividends', '_Export_Values'],
+    'Brokers and Trades are only read (by the cash ledger), never written here');
+  assert.equal(sheets.Brokers.rows.length, 1, 'header only');
+  assert.equal(sheets.Trades.rows.length, 1, 'header only');
   assert.equal(sheets.HoldingTxns.rows.length, 4);
   assert.equal(sheets.Holdings.rows.length, 2);
 });
