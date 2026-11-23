@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
-var APP_VERSION = '2026.11.23';
+var APP_VERSION = '2026.11.23.2';
 // Storage keys start with "wealth": Money Tracker lives on the same github.io address and shares localStorage.
 var SCRIPT_URL = '';
 var API_TOKEN  = '';
@@ -74,7 +74,7 @@ function api(payload, retries) {
   });
 }
 
-// One round-trip on open: holdings, prices, portfolio settings (and trades, once the backend sends them).
+// One round-trip on open: holdings, prices, portfolio settings, trades and brokers (once the backend sends them).
 var holdings = [], holdingTotals = { value: 0, cost: 0, unrealized: 0, realized: 0, dividends: 0, investments: 0, assets: 0 };
 var priceInfo = null, loaded = false;
 function loadAll() {
@@ -87,17 +87,21 @@ function loadAll() {
     if (d.portfolio && d.portfolio.ok) setPortfolioMeta(d.portfolio);
     if (d.trades) setTrades(d.trades);
     else if (journalOn && !trades) loadTrades();      // backend from before the trading journal moved here (3b)
+    setBrokers(d.brokers);                            // backend from before step 3d: no brokers section
     loaded = true;
     renderAll();
   }).catch(function() {
     st.textContent = 'Connection error — reload to retry'; st.style.display = '';
   });
 }
-function renderAll() { renderHome(); renderHoldings(); renderPortfolio(); }
+function renderAll() { renderHome(); renderHoldings(); renderBrokers(); renderPortfolio(); }
 function renderHome() {
   var t = holdingTotals;
-  document.getElementById('header-total').textContent = fmtMoney(t.value);
-  document.getElementById('header-total-sub').textContent = 'Investments ' + fmtMoney(t.investments) + ' · Assets ' + fmtMoney(t.assets);
+  // Broker cash counts once Money Tracker's deposits are known (otherwise it would be only −buys + sells)
+  var cash = brokerCashThb();
+  document.getElementById('header-total').textContent = fmtMoney(t.value + cash);
+  document.getElementById('header-total-sub').textContent = 'Investments ' + fmtMoney(t.investments) + ' · Assets ' + fmtMoney(t.assets) +
+    (brokerCashKnown() ? ' · Broker cash ' + fmtMoney(cash) : '');
   var el = document.getElementById('home-totals');
   if (!holdings.length) { el.style.display = 'none'; return; }
   el.style.display = '';

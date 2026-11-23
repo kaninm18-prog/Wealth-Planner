@@ -3,6 +3,10 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-23
+- Brokers: each broker's cash and total value, its currency, exchange rate and where its dividends are paid (the broker or a Money Tracker bank account). Add, edit and delete brokers.
+- Broker cash uses the deposits and withdrawals from Money Tracker; a note shows when they couldn't be read (deposits as of a date) or aren't connected yet. The total at the top now includes broker cash once deposits are known.
+- Each broker's value, other assets and every new dividend are sent to Money Tracker. A USD dividend also keeps its tax in USD.
+- Taking something out of a broker with no account (e.g. withdrawing a gold bar) moves it from that broker to Other assets, with no cash. If it is held at more than one broker, a warning asks you to check where it is.
 - Home screen: your investments and assets with total value, cost, unrealised and realised gains, dividends, and a "Refresh prices" button.
 - Add, edit and delete holdings and their buys, sales and dividends. The broker is a plain name; foreign amounts are typed with their currency and rate.
 - Portfolio: allocation and targets, returns compared with an index, dividends, and the trading journal (with MT5 import). The journal stays hidden until the backend has it.

@@ -17,14 +17,14 @@ function setup() {
   return { api: b.api, context: b.context, sheets: b.sheets, holding, rows, buyNew };
 }
 
-test('tabs have Money Tracker\'s columns, so they can be copied across as they are (HoldingTxns adds FeeOrig at the end)', () => {
+test('tabs have Money Tracker\'s columns, so they can be copied across as they are (HoldingTxns adds FeeOrig, TaxOrig at the end)', () => {
   const { api, sheets, buyNew } = setup();
   buyNew('PTT', 'stock', 1, 30, 'Broker', '2026-01-10');
   api({ action: 'setTargets', targets: { Gold: 20 } });
   assert.deepEqual([...sheets.Holdings.rows[0]], ['Id', 'Name', 'Kind', 'Symbol', 'Unit', 'CurrentPrice', 'PriceDate', 'Note', 'Status',
     'QuoteCurrency', 'NextXD', 'NextDividend']);
   assert.deepEqual([...sheets.HoldingTxns.rows[0]], ['Id', 'HoldingId', 'Date', 'Type', 'Quantity', 'Price', 'Amount', 'Fee', 'Account', 'Note',
-    'LinkedId', 'OrigAmount', 'Currency', 'FeeOrig']);
+    'LinkedId', 'OrigAmount', 'Currency', 'FeeOrig', 'TaxOrig']);
   assert.deepEqual([...sheets.AllocationTargets.rows[0]], ['Class', 'TargetPct']);
 });
 
@@ -119,13 +119,16 @@ test('dividends: tax withheld is recorded in Fee; quantity unchanged; a dividend
   assert.equal(noAcc.ok, false, 'a dividend needs an account');
 });
 
-test('fees and dividends write to no tab other than Holdings and HoldingTxns', () => {
+test('fees and dividends write no Expenses or Income: only Holdings, HoldingTxns and the export tabs (step 3d)', () => {
   const { api, sheets, buyNew } = setup();
   const r = buyNew('PTT', 'stock', 100, 30, 'Broker', '2026-01-10', { fee: 15, origAmount: 90, currency: 'USD', feeOrig: 0.45 });
   api({ action: 'addHoldingTxn', type: 'sell', holdingId: r.holdingId, quantity: 10, price: 35, fee: 5, account: 'Broker', date: '2026-01-20' });
   api({ action: 'addHoldingTxn', type: 'dividend', holdingId: r.holdingId, amount: 90, tax: 10, account: 'Broker', date: '2026-04-20',
     origAmount: 2.5, currency: 'USD' });
-  assert.deepEqual(Object.keys(sheets).sort(), ['HoldingTxns', 'Holdings']);
+  assert.deepEqual(Object.keys(sheets).sort(), ['Brokers', 'HoldingTxns', 'Holdings', 'Trades', '_Export_Dividends', '_Export_Values'],
+    'Brokers and Trades are only read (by the cash ledger), never written here');
+  assert.equal(sheets.Brokers.rows.length, 1, 'header only');
+  assert.equal(sheets.Trades.rows.length, 1, 'header only');
   assert.equal(sheets.HoldingTxns.rows.length, 4);
   assert.equal(sheets.Holdings.rows.length, 2);
 });
@@ -324,4 +327,17 @@ test('old 13-column HoldingTxns rows (copied from Money Tracker) still read fine
     origAmount: 1200, currency: 'USD', fee: 35, feeOrig: 1 });
   assert.equal(sheets.HoldingTxns.rows[0][13], 'FeeOrig');
   assert.equal(context.holdingTxnRows()[1].feeOrig, 1);
+});
+
+test('new dividends get a WD… Id (plan C8), other entries X…; TaxOrig (C6) keeps the USD tax withheld', () => {
+  const { api, sheets, buyNew } = setup();
+  const r = buyNew('AAPL', 'stock', 1, 3500, 'IBKR', '2026-01-10', { origAmount: 100, currency: 'USD' });
+  assert.match(r.id, /^X/);
+  const d = api({ action: 'addHoldingTxn', type: 'dividend', holdingId: r.holdingId, amount: 70, origAmount: 2, currency: 'USD', tax: 10.5, taxOrig: 0.3,
+    account: 'IBKR', date: '2026-02-01' });
+  assert.match(d.id, /^WD/);
+  const row = sheets.HoldingTxns.rows.find(t => t[0] === d.id);
+  assert.equal(row[14], 0.3); assert.equal(row[12], 'USD'); assert.equal(row[7], 10.5, 'Fee (tax) stays in THB');
+  const kept = api({ action: 'addHoldingTxn', id: 'X0000000001', type: 'dividend', holdingId: r.holdingId, amount: 5, account: 'IBKR', date: '2026-02-02' });
+  assert.equal(kept.id, 'X0000000001', 'an Id sent with the entry is kept (old Ids from Money Tracker)');
 });

@@ -69,7 +69,9 @@ function importPack(p) {
     var price = t.priceForeign !== undefined ? toFloat(t.priceForeign) * fx.rate : toFloat(t.price);
     var amount = (t.amountForeign !== undefined ? toFloat(t.amountForeign) * fx.rate : (toFloat(t.amount) || qty * price)) + toFloat(t.extraThb);
     var hName = String((t.holding || {}).name || "").trim(), hid = t.holdingId || hByName[hName.toLowerCase()] || "";
-    var payload = { id: t.id, type: t.type || "buy", holdingId: hid, holding: t.holding, quantity: qty, price: round2(amount / (qty || 1)),
+    // Imported entries keep their Id, or get an ordinary X Id: an imported dividend is never a WD one, so it is
+    // never exported to Money Tracker, which may already have it as Income (C5/C8).
+    var payload = { id: t.id || newId("X"), type: t.type || "buy", holdingId: hid, holding: t.holding, quantity: qty, price: round2(amount / (qty || 1)),
       amount: round2(amount), fee: toFloat(t.fee), feeOrig: toFloat(t.feeOrig), tax: toFloat(t.tax), account: t.account || "", date: date,
       origAmount: cur !== "THB" ? (t.amountForeign !== undefined ? toFloat(t.amountForeign) : qty * toFloat(t.priceForeign)) : 0, currency: cur,
       note: String(t.note || "") + (cur !== "THB" ? " · " + cur + " @ " + (Math.round(fx.rate * 10000) / 10000) + " THB" : "") };

@@ -83,6 +83,7 @@ var ID_COL = {};
 ID_COL[SHEET.HOLDINGS]     = 1;
 ID_COL[SHEET.HOLDING_TXNS] = 1;
 ID_COL[SHEET.TRADES]       = 1;
+ID_COL[SHEET.BROKERS]      = 1;                 // Brokers are keyed by Name
 
 function newId(prefix) { return prefix + Utilities.getUuid().replace(/-/g, "").slice(0, 10); }
 

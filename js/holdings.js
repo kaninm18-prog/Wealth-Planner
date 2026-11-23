@@ -1,6 +1,6 @@
 // Wealth Planner — holdings: list on the home screen, detail, buy / sell / dividend, live prices.
 // Ported from Money Tracker's js/holdings.js (Stage 4, step 3c). This app has no accounts:
-// the broker is a plain name, and a foreign amount is typed with its currency and rate.
+// the broker is a name (set up in js/brokers.js), and a foreign amount is typed with its currency and rate.
 // Buying/selling moves cash between the broker's cash and the holding — it is not spending.
 // Loaded as a plain <script> (not a module): functions are global so onclick="..." handlers work.
 
@@ -37,10 +37,11 @@ function suggestRate(cur) {
   }); });
   return best ? Math.round(best.amount / best.origAmount * 10000) / 10000 : '';
 }
-// Broker names already used (holding entries and trades), for the suggestions under the Broker field.
+// Broker names (Brokers tab, holding entries and trades), for the suggestions under the Broker field.
 function brokerNames() {
   var seen = {}, out = [];
   var add = function(n){ n = String(n || '').trim(); if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = true; out.push(n); } };
+  if (brokerData) brokerData.brokers.forEach(function(b){ add(b.name); });
   holdings.forEach(function(h){ h.txns.forEach(function(t){ add(t.account); }); });
   (trades || []).forEach(function(t){ add(t.account); });
   return out.sort(function(a, b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
@@ -262,7 +263,11 @@ function tradeFormUpdate() {
   document.getElementById('tr-title').textContent = div ? 'Dividend' : (tradeType === 'sell' ? 'Sell' : (isNew ? 'Add asset / investment' : 'Buy more'));
   var hint = '', rate = tradeRate();
   if (tradeType === 'sell' && h) hint = 'You hold ' + fmtQty(h.quantity) + (h.unit ? ' ' + h.unit : '') + (h.avgCost ? ' · avg cost ' + fmtMoney(h.avgCost) + (cur !== 'THB' && rate ? ' ≈ ' + fmtCur(h.avgCost / rate, cur) : '') : '') + '.';
-  else if (div) hint = 'Amount after tax. Also counted as income in Money Tracker once the two apps are linked.';
+  else if (div) {
+    var acct = document.getElementById('tr-account').value.trim(), to = dividendPaidTo(acct);
+    hint = 'Amount after tax. ' + (to ? 'Paid to ' + to + ' (set on the broker), not into ' + acct + '\'s cash.'
+      : acct ? 'Paid into ' + acct + '\'s cash.' : '') + ' Also counted as income in Money Tracker.';
+  }
   else if (tradeType === 'buy') hint = 'Not counted as spending — it moves money from the broker\'s cash into the holding.';
   document.getElementById('tr-hint').textContent = hint;
   tradeCalc();
@@ -287,7 +292,7 @@ function saveTrade() {
   var payload = { action: 'addHoldingTxn', type: tradeType, holdingId: id, quantity: div ? 0 : qty, price: div ? 0 : price,
     amount: amount, fee: div ? 0 : fee, tax: div ? fee : 0,
     account: document.getElementById('tr-account').value.trim(), date: document.getElementById('tr-date').value || todayStr(),
-    note: document.getElementById('tr-note').value.trim(), id: newClientId('X') };
+    note: document.getElementById('tr-note').value.trim(), id: newClientId(div ? 'WD' : 'X') };   // WD: exported to Money Tracker (C8)
   if (!h) payload.holding = { name: document.getElementById('tr-name').value.trim(), kind: kind,
     symbol: document.getElementById('tr-symbol').value, unit: asset ? '' : (document.getElementById('tr-unit').value.trim() || kindInfo(kind)[4]) };
   if (!payload.account && (div || payload.fee)) { toast(div ? 'Enter the broker that paid it' : 'Enter the broker the fee was paid at'); return; }
@@ -298,7 +303,7 @@ function saveTrade() {
     payload.amount = Math.round(amount * rate * 100) / 100;
     payload.price = Math.round(payload.price * rate * 10000) / 10000;
     if (payload.fee) { payload.feeOrig = payload.fee; payload.fee = Math.round(payload.fee * rate * 100) / 100; }
-    if (payload.tax) payload.tax = Math.round(payload.tax * rate * 100) / 100;
+    if (payload.tax) { payload.taxOrig = payload.tax; payload.tax = Math.round(payload.tax * rate * 100) / 100; }   // C6
   }
   var btn = document.getElementById('tr-save'); btn.textContent = 'Saving…';
   api(payload).then(function(res) {

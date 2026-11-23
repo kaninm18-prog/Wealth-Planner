@@ -1,6 +1,7 @@
 // ── AUTOMATIC PRICES ─────────────────────────────────────────
 // Ported from Money Tracker's src/18_prices.gs (Stage 4, step 3a), holding prices only:
 // this app has no accounts, so Money Tracker keeps refreshing its own account exchange rates.
+// It also refreshes the Rate of every non-THB broker (step 3d), which values that broker's cash.
 // Uses Google Sheets' GOOGLEFINANCE in a hidden "_Prices" sheet.
 //  • Holdings with a Symbol get today's price: "PTT.BK" or "BKK:PTT" (Thai stocks), "NASDAQ:AAPL",
 //    "CURRENCY:BTCTHB"… Prices in other currencies are converted to baht at today's rate.
@@ -71,14 +72,27 @@ function refreshPrices() {
     if (goodNumber(r[1])) r[1] = r[1] * srcs[i].factor;
     if (srcs[i].cur) r[2] = srcs[i].cur;
   });
-  // 2) exchange rates for every non-THB quote currency
-  var curs = {};
+  // 2) exchange rates for every non-THB quote currency and broker currency
+  var curs = {}, brokers = brokerRows();
   px.forEach(function(r){ var c = String(r[2] || "").toUpperCase(); if (c && c !== "THB") curs[c] = true; });
+  brokers.forEach(function(b){ if (b.currency !== "THB") curs[b.currency] = true; });
   var curList = Object.keys(curs);
   var fx = evalFormulas(curList.map(function(c) {
     return ['="' + c + '"', '=IFERROR(GOOGLEFINANCE("CURRENCY:' + c + 'THB"),"")', '=""'];
   }));
   curList.forEach(function(c, i){ if (goodNumber(fx[i][1])) result.rates[c] = fx[i][1]; });
+  // broker Rates (a currency that wasn't found keeps its last rate) and the rates for the cash ledger
+  var bs = getSheet(SHEET.BROKERS);
+  brokers.forEach(function(b) {
+    var r = result.rates[b.currency];
+    if (b.currency === "THB" || !r) return;
+    bs.getRange(b.rowIndex, 4).setValue(Math.round(r * 10000) / 10000);
+  });
+  if (curList.length) {
+    var props = PropertiesService.getScriptProperties(), saved = {};
+    try { saved = JSON.parse(props.getProperty("FX_RATES") || "{}") || {}; } catch (e) { saved = {}; }
+    props.setProperty("FX_RATES", JSON.stringify(Object.assign(saved, result.rates)));
+  }
   // 3) write holding prices (in baht)
   data.forEach(function(h, i) {
     var price = px[i] ? px[i][1] : "", cur = String(px[i] ? px[i][2] : "").toUpperCase() || "THB";
@@ -98,12 +112,13 @@ function refreshPrices() {
   return result;
 }
 
-// Daily job (set up by setupAutomation): refresh prices. No backup or net-worth snapshot here yet.
+// Daily job (set up by setupAutomation): refresh prices, then rebuild the exports for Money Tracker
+// (even if the prices failed: the deposits may have changed). No backup or net-worth snapshot here yet.
 function dailyRefresh() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(60000)) return;
   try {
-    refreshPrices();
+    try { refreshPrices(); } finally { exportsSafe(); }
   } finally { lock.releaseLock(); }
 }
 
