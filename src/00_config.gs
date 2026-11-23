@@ -3,13 +3,16 @@
 //  Investments and assets, split out of Money Tracker (see Money Tracker's docs/stage-4-plan.md).
 //
 //  Sheets (tabs are created with their headers the first time they are used).
-//  Holdings, HoldingTxns, AllocationTargets and _Prices have exactly Money Tracker's layout,
+//  Holdings, HoldingTxns, Trades, AllocationTargets and _Prices have Money Tracker's layout,
 //  so the tabs can be copied across as they are (plan step 5). Never reorder these columns.
 //    Holdings          → Id | Name | Kind | Symbol | Unit | CurrentPrice (THB/unit) | PriceDate | Note | Status | QuoteCurrency | NextXD | NextDividend (per unit)
 //    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency
 //                        Account = the broker's name (plain text). LinkedId is kept for the layout but stays empty here:
 //                        fees and dividends are not copied into Expenses/Income (those tabs don't exist in this app).
 //                        OrigAmount/Currency = the exact amount in a foreign currency, e.g. USD paid/received.
+//    Trades            → Id | Ticket | Symbol | Side | Volume | OpenTime | OpenPrice | CloseTime | ClosePrice | Commission | Swap | Profit | Account | Note | Currency
+//                        Trading journal (e.g. XAUUSD on MT5). Profit/Commission/Swap in Currency (usually USD).
+//                        Account = the broker's name (plain text); trades don't move any balance here.
 //    AllocationTargets → Class | TargetPct
 //    _Prices           → scratch sheet (hidden) where GOOGLEFINANCE formulas are evaluated
 //  Script Properties: BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY.
@@ -18,6 +21,7 @@
 var SHEET = {
   HOLDINGS:     "Holdings",
   HOLDING_TXNS: "HoldingTxns",
+  TRADES:       "Trades",
   TARGETS:      "AllocationTargets",
   PRICES:       "_Prices"
 };
@@ -26,6 +30,7 @@ var SHEET = {
 var HEADERS = {};
 HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice","PriceDate","Note","Status","QuoteCurrency","NextXD","NextDividend"];
 HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency"];
+HEADERS[SHEET.TRADES]       = ["Id","Ticket","Symbol","Side","Volume","OpenTime","OpenPrice","CloseTime","ClosePrice","Commission","Swap","Profit","Account","Note","Currency"];
 HEADERS[SHEET.TARGETS]      = ["Class","TargetPct"];
 HEADERS[SHEET.PRICES]       = ["Symbol","Price","Currency"];
 

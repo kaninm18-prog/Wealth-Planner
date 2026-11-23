@@ -7,7 +7,7 @@ function portfolioMeta() {
   var bench = null;
   try { bench = JSON.parse(props.getProperty("BENCH") || "null"); } catch (e) {}
   return { ok: true, targets: targets, benchmarkSymbol: props.getProperty("BENCH_SYMBOL") || "INDEXBKK:SET",
-           benchmark: bench, tradeCount: 0 };      // trades (and their tab) arrive in a later part of step 3
+           benchmark: bench, tradeCount: Math.max(0, getSheet(SHEET.TRADES).getLastRow() - 1) };
 }
 function setTargets(p) {                           // p.targets = { "Gold": 20, "Thai stocks": 30, ... }
   var sh = getSheet(SHEET.TARGETS), last = sh.getLastRow();
