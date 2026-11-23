@@ -105,3 +105,14 @@ test('an entry addHoldingTxn refuses is skipped with its reason', () => {
   assert.equal(r.holdings.skipped, 1);
   assert.match(r.holdings.fx[0], /Nothing: Choose what you are selling/);
 });
+
+test('importPack passes FeeOrig through for a foreign entry', () => {
+  const { api, txns, context } = setup();
+  context.fxSeries = () => [['2026-01-09', 35]];
+  api({ action: 'importPack', holdingTxns: [
+    { id: 'U1', type: 'buy', holding: { name: 'AAPL', kind: 'stock' }, quantity: 1, priceForeign: 100, fee: 35, feeOrig: 1, currency: 'USD', account: 'IBKR', date: '2026-01-10' },
+    { id: 'T1', type: 'buy', holding: { name: 'PTT', kind: 'stock' }, quantity: 10, price: 30, fee: 15, feeOrig: 15, account: 'Broker', date: '2026-01-10' }] });
+  const [u, t] = txns();
+  assert.equal(u.feeOrig, 1); near(u.fee, 35);
+  assert.equal(t.feeOrig, 0, 'THB entries never store FeeOrig');
+});

@@ -5,11 +5,13 @@
 //  Sheets (tabs are created with their headers the first time they are used).
 //  Holdings, HoldingTxns, Trades, AllocationTargets and _Prices have Money Tracker's layout,
 //  so the tabs can be copied across as they are (plan step 5). Never reorder these columns.
+//  HoldingTxns has one extra column at the end (FeeOrig, plan C3), so it stays a superset of Money Tracker's.
 //    Holdings          → Id | Name | Kind | Symbol | Unit | CurrentPrice (THB/unit) | PriceDate | Note | Status | QuoteCurrency | NextXD | NextDividend (per unit)
-//    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency
+//    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency | FeeOrig
 //                        Account = the broker's name (plain text). LinkedId is kept for the layout but stays empty here:
 //                        fees and dividends are not copied into Expenses/Income (those tabs don't exist in this app).
 //                        OrigAmount/Currency = the exact amount in a foreign currency, e.g. USD paid/received.
+//                        FeeOrig = the fee of a buy/sell in that Currency when it isn't THB (plan C3); Fee stays in THB.
 //    Trades            → Id | Ticket | Symbol | Side | Volume | OpenTime | OpenPrice | CloseTime | ClosePrice | Commission | Swap | Profit | Account | Note | Currency
 //                        Trading journal (e.g. XAUUSD on MT5). Profit/Commission/Swap in Currency (usually USD).
 //                        Account = the broker's name (plain text); trades don't move any balance here.
@@ -29,7 +31,7 @@ var SHEET = {
 // Column headers for each tab, written when a tab is first created.
 var HEADERS = {};
 HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice","PriceDate","Note","Status","QuoteCurrency","NextXD","NextDividend"];
-HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency"];
+HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency","FeeOrig"];
 HEADERS[SHEET.TRADES]       = ["Id","Ticket","Symbol","Side","Volume","OpenTime","OpenPrice","CloseTime","ClosePrice","Commission","Swap","Profit","Account","Note","Currency"];
 HEADERS[SHEET.TARGETS]      = ["Class","TargetPct"];
 HEADERS[SHEET.PRICES]       = ["Symbol","Price","Currency"];

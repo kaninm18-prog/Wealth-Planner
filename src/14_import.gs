@@ -70,7 +70,7 @@ function importPack(p) {
     var amount = (t.amountForeign !== undefined ? toFloat(t.amountForeign) * fx.rate : (toFloat(t.amount) || qty * price)) + toFloat(t.extraThb);
     var hName = String((t.holding || {}).name || "").trim(), hid = t.holdingId || hByName[hName.toLowerCase()] || "";
     var payload = { id: t.id, type: t.type || "buy", holdingId: hid, holding: t.holding, quantity: qty, price: round2(amount / (qty || 1)),
-      amount: round2(amount), fee: toFloat(t.fee), tax: toFloat(t.tax), account: t.account || "", date: date,
+      amount: round2(amount), fee: toFloat(t.fee), feeOrig: toFloat(t.feeOrig), tax: toFloat(t.tax), account: t.account || "", date: date,
       origAmount: cur !== "THB" ? (t.amountForeign !== undefined ? toFloat(t.amountForeign) : qty * toFloat(t.priceForeign)) : 0, currency: cur,
       note: String(t.note || "") + (cur !== "THB" ? " · " + cur + " @ " + (Math.round(fx.rate * 10000) / 10000) + " THB" : "") };
     var r = JSON.parse(addHoldingTxn(payload).getContent());
