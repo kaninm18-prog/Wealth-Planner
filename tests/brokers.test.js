@@ -484,3 +484,17 @@ test('held at more than one broker: a no-broker move is not guessed — it stays
   noNegative(L); near(L.check.diff, 0);
   near(L.brokers.find(x => x.name === 'A').sells, 0, 'no cash moves on a no-broker entry');
 });
+
+test('importPack: imported dividends get ordinary X Ids and are never exported; typed ones get WD', () => {
+  const b = setup();
+  const r = b.buy('PTT', 'stock', 100, 30, 'KS', '2026-11-02');
+  const res = b.api({ action: 'importPack', holdingTxns: [
+    { type: 'dividend', holdingId: r.holdingId, amount: 90, tax: 10, account: 'KS', date: '2026-05-01' },
+    { type: 'buy', holdingId: r.holdingId, quantity: 1, price: 30, account: 'KS', date: '2026-05-02' }] });
+  assert.equal(res.holdings.added, 2);
+  const typed = b.txn('dividend', 'PTT', { amount: 50, account: 'KS', date: '2026-11-10' });
+  const divs = b.sheets.HoldingTxns.rows.filter(t => t[3] === 'dividend').map(t => t[0]);
+  assert.match(divs[0], /^X/, 'imported'); assert.match(divs[1], /^WD/, 'typed');
+  assert.deepEqual(b.dividends().slice(1).map(d => d[0]), [typed.id]);
+  near(b.broker('KS').dividends, 140, 'both still count in broker cash');
+});
