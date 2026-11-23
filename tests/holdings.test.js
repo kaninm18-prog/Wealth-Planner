@@ -285,7 +285,7 @@ test('dailyRefresh refreshes prices', () => {
 test('FeeOrig (plan C3): the USD fee is kept for a USD buy, left empty for THB', () => {
   const { sheets, buyNew, context } = setup();
   buyNew('AAPL', 'stock', 1, 3500, 'IBKR', '2026-01-10', { origAmount: 100, currency: 'usd', fee: 35, feeOrig: 1.004 });
-  buyNew('PTT', 'stock', 10, 30, 'Broker', '2026-01-10', { fee: 15, feeOrig: 15 });
+  buyNew('PTT', 'stock', 10, 30, 'Broker', '2026-01-10', { fee: 15, feeOrig: 15, currency: 'THB' });
   buyNew('MSFT', 'stock', 1, 3500, 'IBKR', '2026-01-10', { origAmount: 100, currency: 'USD', fee: 35 });
   const row = name => {
     const hid = sheets.Holdings.rows.find(r => r[1] === name)[0];
