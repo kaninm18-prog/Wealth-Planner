@@ -208,6 +208,18 @@
   </div>
 </div>
 
+<!-- ══ Import data file ══ -->
+<div class="modal-overlay" id="pack-modal" style="z-index:450">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Import</div>
+    <div id="pack-summary" class="balance-mode-desc" style="line-height:1.55;margin-bottom:14px"></div>
+    <button class="btn btn-primary" id="pack-go" onclick="confirmPackImport()">Import</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('pack-modal')">Cancel</button>
+  </div>
+</div>
+
 <!-- ══ Settings Modal ══ -->
 <div class="modal-overlay" id="settings-modal">
   <div class="modal">
@@ -225,6 +237,12 @@
       </div>
       <button class="btn btn-primary" onclick="updateScriptUrl()">Save</button>
     </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Import data file</div>
+      <div class="balance-mode-desc" style="margin-bottom:8px">Add investments and trades from an import file (.json) prepared for Money Tracker or this app. Accounts in the file are ignored — they stay in Money Tracker. Importing the same file twice adds nothing new.</div>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pack-file').click()">⬆ Choose file…</button>
+      <input type="file" id="pack-file" accept=".json,application/json" style="display:none" onchange="onPackFile(this)">
+    </div>
     <div class="balance-mode-desc" id="app-version" style="text-align:center;margin-top:10px"></div>
     <div style="height:10px"></div>
     <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Close</button>
@@ -236,5 +254,6 @@
 <script src="js/core.js"></script>
 <script src="js/holdings.js"></script>
 <script src="js/portfolio.js"></script>
+<script src="js/settings.js"></script>
 </body>
 </html>
