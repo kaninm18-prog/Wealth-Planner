@@ -53,12 +53,170 @@
         <button class="header-settings-btn" onclick="openSettings()" aria-label="Settings">⚙️</button>
       </div>
     </div>
+    <div class="header-networth" style="cursor:default">
+      <div class="header-networth-label">Total value</div>
+      <div class="header-networth-amount" id="header-total">฿0</div>
+      <div class="header-networth-sub" id="header-total-sub"></div>
+    </div>
   </div>
 
-  <div class="card" style="margin:16px">
-    <div class="card-title">Coming next</div>
-    <div class="balance-mode-desc" id="home-status">Connecting…</div>
-    <div class="balance-mode-desc" style="margin-top:8px">Holdings, prices, dividends and the trading journal move here from Money Tracker in the next step.</div>
+  <main>
+    <div class="balance-mode-desc" id="home-status" style="margin-bottom:10px">Connecting…</div>
+    <div class="hd-grid" id="home-totals" style="display:none;margin-bottom:6px"></div>
+    <div id="holdings-section"><div class="loading-wrap"><div class="spinner"></div></div></div>
+  </main>
+  <datalist id="broker-list"></datalist>
+</div>
+
+<!-- ══ Holding detail Modal ══ -->
+<div class="modal-overlay" id="holding-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="hd-title">Holding</div>
+    <div id="hd-body"></div>
+    <div class="btn-row" style="margin-top:12px" id="hd-actions"></div>
+    <div id="hd-edit" style="display:none;margin-top:12px">
+      <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-control" id="hd-name"></div>
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:1"><label class="form-label">Type</label><select class="form-control" id="hd-kind"></select></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Symbol (optional)</label><input type="text" class="form-control" id="hd-symbol"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Unit (optional)</label><input type="text" class="form-control" id="hd-unit" placeholder="e.g. shares, baht-weight, units"></div>
+      <div class="form-group"><label class="form-label">Note</label><input type="text" class="form-control" id="hd-note"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveHoldingDetails()">Save details</button>
+    </div>
+    <div class="card-title" style="margin-top:16px">History</div>
+    <div id="hd-history"></div>
+    <div style="height:10px"></div>
+    <button class="btn btn-ghost" id="hd-delete" onclick="deleteHolding()">Delete this holding</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('holding-modal')">Close</button>
+  </div>
+</div>
+
+<!-- ══ Buy / Sell / Dividend Modal ══ -->
+<div class="modal-overlay" id="trade-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="tr-title">Buy</div>
+    <div class="type-tabs" id="tr-tabs">
+      <button class="type-tab" id="tr-tab-buy" onclick="setTradeType('buy')">Buy</button>
+      <button class="type-tab" id="tr-tab-sell" onclick="setTradeType('sell')">Sell</button>
+      <button class="type-tab" id="tr-tab-dividend" onclick="setTradeType('dividend')">Dividend</button>
+    </div>
+    <div class="form-group"><label class="form-label">What</label>
+      <select class="form-control" id="tr-holding" onchange="onTradeHolding()"></select></div>
+    <div id="tr-new" class="form-sub" style="display:none">
+      <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-control" id="tr-name" placeholder="e.g. Gold bar 96.5%, PTT, K-USA fund, Honda Jazz"></div>
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:1"><label class="form-label">Type</label><select class="form-control" id="tr-kind" onchange="tradeFormUpdate()"></select></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Symbol (optional)</label><input type="text" class="form-control" id="tr-symbol" placeholder="PTT.BK, NASDAQ:AAPL"></div>
+      </div>
+      <div class="fx-hint" style="display:block;margin:-6px 0 10px">With a symbol, the price updates automatically every day (Thai stocks: add .BK). Gold in oz, baht-weight or grams follows the world gold price automatically (an estimate). Thai mutual funds aren't available — update those by hand.</div>
+      <div class="form-group" id="tr-unit-group"><label class="form-label">Unit (optional)</label><input type="text" class="form-control" id="tr-unit" placeholder="shares, baht-weight, units"></div>
+    </div>
+    <div class="form-group"><label class="form-label" id="tr-acct-label">Broker</label>
+      <input type="text" class="form-control" id="tr-account" list="broker-list" autocomplete="off"></div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label">Currency</label>
+        <select class="form-control" id="tr-currency" onchange="onTradeCurrency()"></select></div>
+      <div class="form-group" style="flex:1" id="tr-rate-group"><label class="form-label" id="tr-rate-label">1 USD = ฿</label>
+        <input type="number" class="form-control" id="tr-rate" inputmode="decimal" step="any" oninput="tradeFormUpdate()"></div>
+    </div>
+    <div style="display:flex;gap:10px" id="tr-qp">
+      <div class="form-group" style="flex:1" id="tr-qty-group"><label class="form-label" id="tr-qty-label">Quantity</label>
+        <input type="number" class="form-control" id="tr-qty" inputmode="decimal" step="any" oninput="tradeCalc()"></div>
+      <div class="form-group" style="flex:1" id="tr-price-group"><label class="form-label" id="tr-price-label">Price per unit (฿)</label>
+        <input type="number" class="form-control" id="tr-price" inputmode="decimal" step="any" oninput="tradeCalc()"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label" id="tr-amount-label">Total (฿)</label>
+        <input type="number" class="form-control" id="tr-amount" inputmode="decimal" step="any" oninput="this.dataset.touched='1'"></div>
+      <div class="form-group" style="flex:1" id="tr-fee-group"><label class="form-label" id="tr-fee-label">Fee (฿)</label>
+        <input type="number" class="form-control" id="tr-fee" inputmode="decimal" step="any" placeholder="0"></div>
+    </div>
+    <div class="fx-hint" id="tr-hint" style="display:block;margin:-4px 0 10px"></div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label">Date</label><input type="date" class="form-control" id="tr-date"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Note</label><input type="text" class="form-control" id="tr-note"></div>
+    </div>
+    <button class="btn btn-primary" id="tr-save" onclick="saveTrade()">Save</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('trade-modal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ Portfolio (full screen) ══ -->
+<div class="annual-modal-overlay" id="portfolio-modal">
+  <div class="annual-modal">
+    <div class="annual-modal-header">
+      <div class="annual-modal-title">📊 Portfolio</div>
+      <button class="btn btn-ghost btn-sm" onclick="closePortfolio()">✕ Close</button>
+    </div>
+    <div class="type-tabs" style="margin-bottom:14px">
+      <button class="type-tab" id="pf-tab-allocation" onclick="setPfTab('allocation')">Allocation</button>
+      <button class="type-tab" id="pf-tab-returns" onclick="setPfTab('returns')">Returns</button>
+      <button class="type-tab" id="pf-tab-dividends" onclick="setPfTab('dividends')">Dividends</button>
+      <button class="type-tab" id="pf-tab-trading" onclick="setPfTab('trading')">Trading</button>
+    </div>
+    <div id="pf-body"></div>
+    <input type="file" id="tj-file" accept=".htm,.html,.csv,.txt,.xml,text/html,text/csv" style="display:none" onchange="onTradeFile(this)">
+  </div>
+</div>
+
+<!-- ══ Add trade ══ -->
+<div class="modal-overlay" id="tj-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Add trade</div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1.2"><label class="form-label">Symbol</label><input type="text" class="form-control" id="tj-symbol" autocomplete="off"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Side</label><select class="form-control" id="tj-side"><option value="buy">Buy</option><option value="sell">Sell</option></select></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Lots</label><input type="number" class="form-control" id="tj-volume" step="0.01" inputmode="decimal"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1.4"><label class="form-label">Opened</label><input type="datetime-local" class="form-control" id="tj-open-time"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Price</label><input type="number" class="form-control" id="tj-open-price" step="any" inputmode="decimal"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1.4"><label class="form-label">Closed (empty = still open)</label><input type="datetime-local" class="form-control" id="tj-close-time"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Price</label><input type="number" class="form-control" id="tj-close-price" step="any" inputmode="decimal"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label">Profit ($)</label><input type="number" class="form-control" id="tj-profit" step="0.01" inputmode="decimal"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Commission</label><input type="number" class="form-control" id="tj-commission" step="0.01" inputmode="decimal" placeholder="-0.70"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Swap</label><input type="number" class="form-control" id="tj-swap" step="0.01" inputmode="decimal"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Broker (optional)</label><input type="text" class="form-control" id="tj-account" list="broker-list" autocomplete="off" placeholder="Empty = journal only"></div>
+    <div class="form-group"><label class="form-label">Note / setup</label><input type="text" class="form-control" id="tj-note" placeholder="e.g. breakout, news, EA name"></div>
+    <button class="btn btn-primary" onclick="saveTradeForm()">Save trade</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('tj-modal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ Import trades ══ -->
+<div class="modal-overlay" id="tj-import-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Import trades</div>
+    <div class="balance-mode-desc" id="tji-summary" style="margin-bottom:12px;line-height:1.5"></div>
+    <div class="form-group"><label class="form-label">Broker (optional)</label><input type="text" class="form-control" id="tji-account" list="broker-list" autocomplete="off" placeholder="Empty = journal only"></div>
+    <button class="btn btn-primary" id="tji-go" onclick="confirmTradeImport()">Import</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('tj-import-modal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ Import data file ══ -->
+<div class="modal-overlay" id="pack-modal" style="z-index:450">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Import</div>
+    <div id="pack-summary" class="balance-mode-desc" style="line-height:1.55;margin-bottom:14px"></div>
+    <button class="btn btn-primary" id="pack-go" onclick="confirmPackImport()">Import</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('pack-modal')">Cancel</button>
   </div>
 </div>
 
@@ -79,6 +237,12 @@
       </div>
       <button class="btn btn-primary" onclick="updateScriptUrl()">Save</button>
     </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Import data file</div>
+      <div class="balance-mode-desc" style="margin-bottom:8px">Add investments and trades from an import file (.json) prepared for Money Tracker or this app. Accounts in the file are ignored — they stay in Money Tracker. Importing the same file twice adds nothing new.</div>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pack-file').click()">⬆ Choose file…</button>
+      <input type="file" id="pack-file" accept=".json,application/json" style="display:none" onchange="onPackFile(this)">
+    </div>
     <div class="balance-mode-desc" id="app-version" style="text-align:center;margin-top:10px"></div>
     <div style="height:10px"></div>
     <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Close</button>
@@ -88,5 +252,8 @@
 <div id="toast"></div>
 
 <script src="js/core.js"></script>
+<script src="js/holdings.js"></script>
+<script src="js/portfolio.js"></script>
+<script src="js/settings.js"></script>
 </body>
 </html>
