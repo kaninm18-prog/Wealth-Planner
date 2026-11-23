@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
-var APP_VERSION = '2026.11.22';
+var APP_VERSION = '2026.11.23';
 // Storage keys start with "wealth": Money Tracker lives on the same github.io address and shares localStorage.
 var SCRIPT_URL = '';
 var API_TOKEN  = '';
