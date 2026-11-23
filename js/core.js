@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════
-//  WEALTH PLANNER — core: connection, API, modals, toast
+//  WEALTH PLANNER — core: connection, API, loading, formatting, modals, toast
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
@@ -74,14 +74,65 @@ function api(payload, retries) {
   });
 }
 
+// One round-trip on open: holdings, prices, portfolio settings (and trades, once the backend sends them).
+var holdings = [], holdingTotals = { value: 0, cost: 0, unrealized: 0, realized: 0, dividends: 0, investments: 0, assets: 0 };
+var priceInfo = null, loaded = false;
 function loadAll() {
   var st = document.getElementById('home-status');
   return api({ action: 'bootstrap' }).then(function(d) {
-    if (d && d.ok) st.textContent = 'Connected to "' + d.sheet + '".';
-    else st.textContent = 'Not connected: ' + ((d && d.error) || 'no answer');
+    if (!d || !d.ok) { st.textContent = 'Not connected: ' + ((d && d.error) || 'no answer'); st.style.display = ''; return; }
+    st.style.display = 'none';
+    if (d.prices) priceInfo = d.prices;
+    if (d.holdings && d.holdings.ok) { holdings = d.holdings.holdings || []; holdingTotals = d.holdings.totals || holdingTotals; }
+    if (d.portfolio && d.portfolio.ok) setPortfolioMeta(d.portfolio);
+    if (d.trades) setTrades(d.trades);
+    else if (journalOn && !trades) loadTrades();      // backend from before the trading journal moved here (3b)
+    loaded = true;
+    renderAll();
   }).catch(function() {
-    st.textContent = 'Connection error — reload to retry';
+    st.textContent = 'Connection error — reload to retry'; st.style.display = '';
   });
+}
+function renderAll() { renderHome(); renderHoldings(); renderPortfolio(); }
+function renderHome() {
+  var t = holdingTotals;
+  document.getElementById('header-total').textContent = fmtMoney(t.value);
+  document.getElementById('header-total-sub').textContent = 'Investments ' + fmtMoney(t.investments) + ' · Assets ' + fmtMoney(t.assets);
+  var el = document.getElementById('home-totals');
+  if (!holdings.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = [['Cost', fmtMoney(t.cost), 'what you hold, at average cost'], ['Unrealised', plHtml(t.unrealized, t.cost), 'not sold yet'],
+    ['Realised', plHtml(t.realized, 0), 'from sales'], ['Dividends', fmtMoney(t.dividends), 'all time, after tax']].map(function(x) {
+    return '<div class="hd-stat"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div><div class="s">' + x[2] + '</div></div>';
+  }).join('');
+}
+// The backend answers "Unknown action" when it is older than the app; api() has already said so in a toast.
+function oldBackend(res) { return !!(res && res.ok === false && /Unknown action/.test(res.error || '')); }
+function apiError(res) { if (!oldBackend(res) && !(res && res.auth)) toast('Error: ' + ((res && res.error) || '?'), 4000); }
+
+// ════════════════════════════════════════════
+//  FORMATTING (copied from Money Tracker's js/core.js; no privacy mode here)
+// ════════════════════════════════════════════
+var CUR_SYM = {USD:'$',EUR:'€',GBP:'£',JPY:'¥',SGD:'S$',CNY:'¥',AUD:'A$',HKD:'HK$'};
+function curSym(c) { return c === 'THB' ? '฿' : (CUR_SYM[c] || c); }
+function fmtMoney(n) { return '฿' + parseFloat(n||0).toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2}); }
+function fmtCur(n, cur) {
+  if (!cur || cur === 'THB') return fmtMoney(n);
+  return (CUR_SYM[cur] || cur + ' ') + parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDateY(str) { if(!str)return''; var d=new Date(str+'T00:00:00'); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
+function fmtDate(str) { if(!str)return''; var d=new Date(str+'T00:00:00'); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); }
+function todayStr() { var d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function pad(n) { return n<10?'0'+n:''+n; }
+function addDaysStr(str, n) { var d = new Date(str+'T00:00:00'); d.setDate(d.getDate() + n); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+var SHORT_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function recEsc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function escQ(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function escAttr(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+// Ids made on the device, so a retried save is recognised by the backend instead of saved twice.
+function newClientId(prefix) {
+  var r = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '') : (Date.now().toString(16) + Math.random().toString(16).slice(2));
+  return prefix + r.slice(0, 10);
 }
 
 // ════════════════════════════════════════════
