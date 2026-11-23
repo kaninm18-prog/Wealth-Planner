@@ -4,7 +4,7 @@
 // Buying/selling moves cash between a broker's cash and the holding; it is NOT spending or income.
 // Unlike Money Tracker, fees and dividends are NOT copied into Expenses/Income (plan D2/D3):
 // a fee stays in the HoldingTxns Fee column, a dividend stays a "dividend" row (tax withheld in Fee).
-// Account is the broker's name only; broker cash balances come later (step 3d).
+// Account is the broker's name; broker cash balances come later (step 3d).
 // Cost basis uses the average-cost method.
 var HOLDING_KINDS = { gold: "investment", stock: "investment", etf: "investment", fund: "investment",
   crypto: "investment", bond: "investment", property: "asset", vehicle: "asset", electronics: "asset", other: "asset" };
@@ -14,7 +14,7 @@ function holdingTxnRows() {
     return { rowIndex: ri, id: String(d[0] || ""), holdingId: String(d[1] || ""), date: formatDate(d[2]),
       type: String(d[3] || ""), quantity: toFloat(d[4]), price: toFloat(d[5]), amount: toFloat(d[6]),
       fee: toFloat(d[7]), account: String(d[8] || "").trim(), note: String(d[9] || ""), linkedId: String(d[10] || ""),
-      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]) };
+      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]), taxOrig: toFloat(d[14]) };
   });
 }
 
@@ -125,7 +125,9 @@ function addHoldingTxn(p) {
   // account may be empty for buy/sell = something you already owned (no cash moves)
   if (!account && (type === "dividend" || fee > 0)) return jsonResponse({ ok: false, error: "Choose an account" });
   var linked = "";                                  // LinkedId: kept for the layout, nothing is linked here
-  var sh = getSheet(SHEET.HOLDING_TXNS), r = sh.getLastRow() + 1, id = p.id || newId("X");
+  // New dividends get a WD… Id: only those are exported to Money Tracker as Income (plan C8).
+  // An Id sent with the entry (the app's retry id, or an old Id from an import file) is kept as it is.
+  var sh = getSheet(SHEET.HOLDING_TXNS), r = sh.getLastRow() + 1, id = p.id || newId(type === "dividend" ? "WD" : "X");
   sh.getRange(r, 3).setNumberFormat("@");
   var tax = round2(toFloat(p.tax));
   sh.getRange(r, 1, 1, 11).setValues([[id, holdingId, date, type, type === "dividend" ? "" : qty, price || "",
@@ -140,6 +142,13 @@ function addHoldingTxn(p) {
   if (feeForeign) {
     ensureHeaders(sh, 12, ["OrigAmount", "Currency", "FeeOrig"]);
     sh.getRange(r, 13, 1, 2).setValues([[String(p.currency).toUpperCase(), round2(toFloat(p.feeOrig))]]);
+  }
+  // The exact tax withheld on a foreign dividend (plan C6): same rule as FeeOrig, one column further on.
+  var taxForeign = type === "dividend" && tax > 0 && toFloat(p.taxOrig) && p.currency && String(p.currency).toUpperCase() !== "THB";
+  if (taxForeign) {
+    ensureHeaders(sh, 12, ["OrigAmount", "Currency", "FeeOrig", "TaxOrig"]);
+    sh.getRange(r, 13).setValue(String(p.currency).toUpperCase());
+    sh.getRange(r, 15).setValue(round2(toFloat(p.taxOrig)));
   }
   // latest trade price becomes the current price, unless a newer price was set by hand
   if (price && type !== "dividend" && (!h.priceDate || date >= h.priceDate)) {
