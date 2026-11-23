@@ -3,6 +3,7 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-23
+- Brokers: an opening cash amount, for cash that was already at the broker when you set it up here.
 - Brokers: each broker's cash and total value, its currency, exchange rate and where its dividends are paid (the broker or a Money Tracker bank account). Add, edit and delete brokers.
 - Broker cash uses the deposits and withdrawals from Money Tracker; a note shows when they couldn't be read (deposits as of a date) or aren't connected yet. The total at the top now includes broker cash once deposits are known.
 - Each broker's value, other assets and every new dividend are sent to Money Tracker. A USD dividend also keeps its tax in USD.

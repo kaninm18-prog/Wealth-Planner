@@ -33,19 +33,19 @@ function setup(opts) {
 }
 
 // ── Brokers tab ──────────────────────────────────────────────
-test('Brokers tab: Name | Currency | DividendsTo | Rate | Note, added and changed by Name', () => {
+test('Brokers tab: Name | Currency | DividendsTo | Rate | Note | OpeningCash, added and changed by Name', () => {
   const b = setup();
   assert.ok(b.api({ action: 'setBroker', name: 'KS', currency: 'thb', note: 'Kasikorn' }).added);
   assert.ok(b.api({ action: 'setBroker', name: 'IBKR', currency: 'USD', rate: 35, dividendsTo: 'Bank' }).ok);
   assert.deepEqual(plain(b.sheets.Brokers.rows), [
-    ['Name', 'Currency', 'DividendsTo', 'Rate', 'Note'],
-    ['KS', 'THB', '', 1, 'Kasikorn'],
-    ['IBKR', 'USD', 'Bank', 35, ''],
+    ['Name', 'Currency', 'DividendsTo', 'Rate', 'Note', 'OpeningCash'],
+    ['KS', 'THB', '', 1, 'Kasikorn', ''],
+    ['IBKR', 'USD', 'Bank', 35, '', ''],
   ]);
   // change by name: no new row; an empty rate keeps the saved one; the note is kept when not sent
   const res = b.api({ action: 'setBroker', name: 'IBKR', currency: 'USD', dividendsTo: '' });
   assert.equal(res.added, false);
-  assert.deepEqual(plain(b.sheets.Brokers.rows[2]), ['IBKR', 'USD', '', 35, '']);
+  assert.deepEqual(plain(b.sheets.Brokers.rows[2]), ['IBKR', 'USD', '', 35, '', '']);
   b.api({ action: 'setBroker', name: 'KS', currency: 'THB', dividendsTo: 'KS' });
   assert.equal(b.sheets.Brokers.rows[1][2], '', 'dividends to itself = into the broker\'s cash');
   assert.equal(b.sheets.Brokers.rows[1][4], 'Kasikorn');
@@ -497,4 +497,49 @@ test('importPack: imported dividends get ordinary X Ids and are never exported; 
   assert.match(divs[0], /^X/, 'imported'); assert.match(divs[1], /^WD/, 'typed');
   assert.deepEqual(b.dividends().slice(1).map(d => d[0]), [typed.id]);
   near(b.broker('KS').dividends, 140, 'both still count in broker cash');
+});
+
+// ── Opening cash ("start over": cash already at the broker when it is set up here) ──
+test('opening cash is part of broker cash and of the exported value; saving without it keeps it', () => {
+  const b = setup();
+  b.api({ action: 'setBroker', name: 'KS', currency: 'THB', openingCash: 5000 });
+  assert.equal(b.sheets.Brokers.rows[1][5], 5000);
+  b.buy('PTT', 'stock', 100, 30, 'KS', '2026-01-10');
+  near(b.broker('KS').opening, 5000);
+  near(b.broker('KS').cash, 5000 - 3000);
+  b.api({ action: 'bootstrap' });
+  near(b.valueRow('KS')[2], 5000 - 3000 + 3000, 'cash + holdings');
+  b.api({ action: 'setBroker', name: 'KS', currency: 'THB', note: 'changed' });          // an older app sends no openingCash
+  assert.equal(b.sheets.Brokers.rows[1][5], 5000, 'kept');
+  b.api({ action: 'setBroker', name: 'KS', currency: 'THB', openingCash: 0 });
+  near(b.broker('KS').cash, -3000, 'cleared on purpose');
+});
+
+test('a Brokers tab from before the column existed still reads, and gets the header on the next save', () => {
+  const b = setup();
+  const sh = b.makeSheet('Brokers');               // as saved by the step 3d version: 5 columns
+  sh.rows.push(['Name', 'Currency', 'DividendsTo', 'Rate', 'Note'], ['KS', 'THB', '', 1, '']);
+  b.sheets.Brokers = sh;
+  near(b.broker('KS').opening, 0);
+  b.api({ action: 'setBroker', name: 'KS', currency: 'THB', openingCash: 10 });
+  assert.equal(sh.rows[0][5], 'OpeningCash');
+  near(b.broker('KS').opening, 10);
+});
+
+test('start over, MTS case: USD opening $4,958.32 + 29 trades netting $946.21 = $5,904.53 (the statement)', () => {
+  const b = setup();
+  b.api({ action: 'setBroker', name: 'MTS Gold (USD)', currency: 'USD', rate: 33.93, openingCash: 4958.32 });
+  // trades as copied from Money Tracker: only their net matters for cash
+  const nets = [600.00, 346.21];
+  nets.forEach((n, i) => b.api({ action: 'addTrade', ticket: 'T' + i, symbol: 'XAUUSD', side: 'buy', volume: 0.1,
+    openTime: '2026-01-0' + (i + 1) + ' 10:00', closeTime: '2026-01-0' + (i + 1) + ' 12:00', profit: n, commission: 0, swap: 0,
+    account: 'MTS Gold (USD)', currency: 'USD' }));
+  near(b.broker('MTS Gold (USD)').cash, 5904.53);
+  b.api({ action: 'bootstrap' });
+  const row = b.valueRow('MTS Gold (USD)');
+  near(row[2], 5904.53); near(row[3], 5904.53 * 33.93);
+  // a gold bar at home, entered fresh with no broker → "Other assets"
+  b.buy('Gold bar 96.5%', 'gold', 0.5, 68345.54, '', '2026-02-20', { amount: 34172.77 });
+  b.api({ action: 'bootstrap' });
+  near(b.valueRow('Other assets')[2], 34172.77);
 });

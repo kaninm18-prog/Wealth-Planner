@@ -18,7 +18,9 @@
 //                        Trading journal (e.g. XAUUSD on MT5). Profit/Commission/Swap in Currency (usually USD).
 //                        Account = the broker's name (plain text); trades don't move any balance here.
 //    AllocationTargets → Class | TargetPct
-//    Brokers           → Name | Currency | DividendsTo | Rate | Note           (src/15_brokers.gs, step 3d)
+//    Brokers           → Name | Currency | DividendsTo | Rate | Note | OpeningCash   (src/15_brokers.gs, step 3d)
+//                        OpeningCash = cash already at the broker when it was set up here, in its own currency
+//                        ("start over": e.g. what Money Tracker had as the account's starting balance)
 //                        Name = the broker name used in HoldingTxns.Account / Trades.Account, which is also the
 //                        LinkedTo name of its linked investment account in Money Tracker. Rows are found by Name.
 //                        Currency = the broker's cash currency. DividendsTo = empty (dividends are paid into the
@@ -51,7 +53,7 @@ HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice"
 HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency","FeeOrig","TaxOrig"];
 HEADERS[SHEET.TRADES]       = ["Id","Ticket","Symbol","Side","Volume","OpenTime","OpenPrice","CloseTime","ClosePrice","Commission","Swap","Profit","Account","Note","Currency"];
 HEADERS[SHEET.TARGETS]      = ["Class","TargetPct"];
-HEADERS[SHEET.BROKERS]      = ["Name","Currency","DividendsTo","Rate","Note"];
+HEADERS[SHEET.BROKERS]      = ["Name","Currency","DividendsTo","Rate","Note","OpeningCash"];
 HEADERS[SHEET.PRICES]       = ["Symbol","Price","Currency"];
 // The export tabs' columns are the contract with Money Tracker: never reorder them.
 HEADERS[SHEET.EXPORT_VALUES]    = ["Account","Currency","Value","ValueTHB","AsOf"];

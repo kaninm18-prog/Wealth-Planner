@@ -165,6 +165,9 @@
     <div class="form-group"><label class="form-label">Dividends paid to</label>
       <input type="text" class="form-control" id="bk-divto" placeholder="Empty = into this broker's cash" autocomplete="off">
       <div class="fx-hint">Or the name of a bank account in Money Tracker (not this broker's linked account). Every dividend is also recorded as income in Money Tracker.</div></div>
+    <div class="form-group"><label class="form-label">Opening cash</label>
+      <input type="number" class="form-control" id="bk-opening" placeholder="0" inputmode="decimal" step="0.01">
+      <div class="fx-hint">Cash already at this broker when you set it up here, in its own currency. Money moved in or out later comes from Money Tracker's transfers.</div></div>
     <div class="form-group"><label class="form-label">Note</label><input type="text" class="form-control" id="bk-note"></div>
     <button class="btn btn-primary" id="bk-save" onclick="saveBroker()">Save</button>
     <div style="height:8px"></div>
