@@ -39,6 +39,7 @@ function route(p) {
       case "addTrade":               return addTrade(p);
       case "deleteTrade":            return deleteTrade(p);
       case "importTrades":           return importTrades(p);
+      case "importPack":             return importPack(p);
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + p.action });
     }
