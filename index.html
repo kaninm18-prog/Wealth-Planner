@@ -64,6 +64,7 @@
     <div class="balance-mode-desc" id="home-status" style="margin-bottom:10px">Connecting…</div>
     <div class="hd-grid" id="home-totals" style="display:none;margin-bottom:6px"></div>
     <div id="holdings-section"><div class="loading-wrap"><div class="spinner"></div></div></div>
+    <div id="brokers-section"></div>
   </main>
   <datalist id="broker-list"></datalist>
 </div>
@@ -116,7 +117,7 @@
       <div class="form-group" id="tr-unit-group"><label class="form-label">Unit (optional)</label><input type="text" class="form-control" id="tr-unit" placeholder="shares, baht-weight, units"></div>
     </div>
     <div class="form-group"><label class="form-label" id="tr-acct-label">Broker</label>
-      <input type="text" class="form-control" id="tr-account" list="broker-list" autocomplete="off"></div>
+      <input type="text" class="form-control" id="tr-account" list="broker-list" autocomplete="off" oninput="tradeFormUpdate()"></div>
     <div style="display:flex;gap:10px">
       <div class="form-group" style="flex:1"><label class="form-label">Currency</label>
         <select class="form-control" id="tr-currency" onchange="onTradeCurrency()"></select></div>
@@ -143,6 +144,33 @@
     <button class="btn btn-primary" id="tr-save" onclick="saveTrade()">Save</button>
     <div style="height:8px"></div>
     <button class="btn btn-ghost" onclick="closeModal('trade-modal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ Broker Modal ══ -->
+<div class="modal-overlay" id="broker-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="bk-title">Broker</div>
+    <div id="bk-body"></div>
+    <div class="form-group"><label class="form-label">Name</label>
+      <input type="text" class="form-control" id="bk-name" placeholder="e.g. Kasikorn Securities, IBKR, Gold shop" autocomplete="off">
+      <div class="fx-hint">The same name as the linked investment account's "Linked to" in Money Tracker.</div></div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label">Cash currency</label>
+        <select class="form-control" id="bk-currency" onchange="brokerFormUpdate()"></select></div>
+      <div class="form-group" style="flex:1" id="bk-rate-group"><label class="form-label" id="bk-rate-label">1 USD = ฿</label>
+        <input type="number" class="form-control" id="bk-rate" inputmode="decimal" step="any"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Dividends paid to</label>
+      <input type="text" class="form-control" id="bk-divto" placeholder="Empty = into this broker's cash" autocomplete="off">
+      <div class="fx-hint">Or the name of a bank account in Money Tracker (not this broker's linked account). Every dividend is also recorded as income in Money Tracker.</div></div>
+    <div class="form-group"><label class="form-label">Note</label><input type="text" class="form-control" id="bk-note"></div>
+    <button class="btn btn-primary" id="bk-save" onclick="saveBroker()">Save</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" id="bk-delete" onclick="deleteBroker()">Delete this broker</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('broker-modal')">Close</button>
   </div>
 </div>
 
@@ -254,6 +282,7 @@
 <script src="js/core.js"></script>
 <script src="js/holdings.js"></script>
 <script src="js/portfolio.js"></script>
+<script src="js/brokers.js"></script>
 <script src="js/settings.js"></script>
 </body>
 </html>
