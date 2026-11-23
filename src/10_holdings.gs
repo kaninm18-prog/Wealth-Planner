@@ -14,7 +14,7 @@ function holdingTxnRows() {
     return { rowIndex: ri, id: String(d[0] || ""), holdingId: String(d[1] || ""), date: formatDate(d[2]),
       type: String(d[3] || ""), quantity: toFloat(d[4]), price: toFloat(d[5]), amount: toFloat(d[6]),
       fee: toFloat(d[7]), account: String(d[8] || "").trim(), note: String(d[9] || ""), linkedId: String(d[10] || ""),
-      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase() };
+      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]) };
   });
 }
 
@@ -133,6 +133,13 @@ function addHoldingTxn(p) {
   if (toFloat(p.origAmount) && p.currency && String(p.currency).toUpperCase() !== "THB") {
     ensureHeaders(sh, 12, ["OrigAmount", "Currency"]);
     sh.getRange(r, 12, 1, 2).setValues([[round2(toFloat(p.origAmount)), String(p.currency).toUpperCase()]]);
+  }
+  // The exact fee in the trade's currency (plan C3), same rule as Money Tracker's fee Expenses row.
+  // Currency is written with it, so FeeOrig always says which currency it is in.
+  var feeForeign = type !== "dividend" && fee > 0 && toFloat(p.feeOrig) && p.currency && String(p.currency).toUpperCase() !== "THB";
+  if (feeForeign) {
+    ensureHeaders(sh, 12, ["OrigAmount", "Currency", "FeeOrig"]);
+    sh.getRange(r, 13, 1, 2).setValues([[String(p.currency).toUpperCase(), round2(toFloat(p.feeOrig))]]);
   }
   // latest trade price becomes the current price, unless a newer price was set by hand
   if (price && type !== "dividend" && (!h.priceDate || date >= h.priceDate)) {

@@ -17,14 +17,14 @@ function setup() {
   return { api: b.api, context: b.context, sheets: b.sheets, holding, rows, buyNew };
 }
 
-test('tabs have exactly Money Tracker\'s columns, so they can be copied across as they are', () => {
+test('tabs have Money Tracker\'s columns, so they can be copied across as they are (HoldingTxns adds FeeOrig at the end)', () => {
   const { api, sheets, buyNew } = setup();
   buyNew('PTT', 'stock', 1, 30, 'Broker', '2026-01-10');
   api({ action: 'setTargets', targets: { Gold: 20 } });
   assert.deepEqual([...sheets.Holdings.rows[0]], ['Id', 'Name', 'Kind', 'Symbol', 'Unit', 'CurrentPrice', 'PriceDate', 'Note', 'Status',
     'QuoteCurrency', 'NextXD', 'NextDividend']);
   assert.deepEqual([...sheets.HoldingTxns.rows[0]], ['Id', 'HoldingId', 'Date', 'Type', 'Quantity', 'Price', 'Amount', 'Fee', 'Account', 'Note',
-    'LinkedId', 'OrigAmount', 'Currency']);
+    'LinkedId', 'OrigAmount', 'Currency', 'FeeOrig']);
   assert.deepEqual([...sheets.AllocationTargets.rows[0]], ['Class', 'TargetPct']);
 });
 
@@ -280,4 +280,48 @@ test('dailyRefresh refreshes prices', () => {
   context.refreshPrices = () => { ran++; return { ok: true, updated: [], failed: [] }; };
   context.dailyRefresh();
   assert.equal(ran, 1);
+});
+
+test('FeeOrig (plan C3): the USD fee is kept for a USD buy, left empty for THB', () => {
+  const { sheets, buyNew, context } = setup();
+  buyNew('AAPL', 'stock', 1, 3500, 'IBKR', '2026-01-10', { origAmount: 100, currency: 'usd', fee: 35, feeOrig: 1.004 });
+  buyNew('PTT', 'stock', 10, 30, 'Broker', '2026-01-10', { fee: 15, feeOrig: 15, currency: 'THB' });
+  buyNew('MSFT', 'stock', 1, 3500, 'IBKR', '2026-01-10', { origAmount: 100, currency: 'USD', fee: 35 });
+  const row = name => {
+    const hid = sheets.Holdings.rows.find(r => r[1] === name)[0];
+    return sheets.HoldingTxns.rows.find(r => r[1] === hid);
+  };
+  assert.equal(row('AAPL')[13], 1, 'rounded to 2 decimals');
+  assert.equal(row('AAPL')[12], 'USD'); assert.equal(row('AAPL')[7], 35, 'Fee stays in THB');
+  assert.ok(!row('PTT')[13], 'THB: no FeeOrig'); assert.ok(!row('PTT')[12], 'THB: no Currency');
+  assert.ok(!row('MSFT')[13], 'no feeOrig sent: none stored');
+  const t = context.holdingTxnRows();
+  assert.deepEqual([...t.map(x => x.feeOrig)], [1, 0, 0]);
+});
+
+test('FeeOrig is written with its currency even when there is no OrigAmount; dividends never get one', () => {
+  const { api, sheets, buyNew } = setup();
+  const r = buyNew('AAPL', 'stock', 1, 3500, 'IBKR', '2026-01-10', { currency: 'USD', fee: 35, feeOrig: 1 });
+  api({ action: 'addHoldingTxn', type: 'dividend', holdingId: r.holdingId, amount: 70, tax: 10, account: 'IBKR', date: '2026-02-01',
+    origAmount: 2, currency: 'USD', feeOrig: 0.3 });
+  const [buy, div] = sheets.HoldingTxns.rows.slice(1);
+  assert.equal(buy[11], undefined, 'no OrigAmount was sent');
+  assert.equal(buy[12], 'USD'); assert.equal(buy[13], 1);
+  assert.ok(!div[13], 'on a dividend the Fee column is tax withheld, not a fee');
+});
+
+test('old 13-column HoldingTxns rows (copied from Money Tracker) still read fine', () => {
+  const { api, sheets, context, holding } = setup();
+  api({ action: 'getHoldings' });                         // creates the tabs
+  sheets.Holdings.rows.push(['H1', 'Gold', 'gold', '', 'baht', '', '', '', 'active']);
+  sheets.HoldingTxns.rows[0] = sheets.HoldingTxns.rows[0].slice(0, 13);   // Money Tracker's header row
+  sheets.HoldingTxns.rows.push(['X1', 'H1', '2026-01-10', 'buy', 2, 40000, 80000, 50, 'Broker', '', 'E1', 2300, 'USD']);
+  const t = context.holdingTxnRows()[0];
+  assert.equal(t.feeOrig, 0); near(t.origAmount, 2300); assert.equal(t.currency, 'USD'); near(t.fee, 50);
+  near(holding('Gold').cost, 80000); near(holding('Gold').fees, 50);
+  // a new USD buy with a fee adds the FeeOrig header to the old tab
+  api({ action: 'addHoldingTxn', type: 'buy', holdingId: 'H1', quantity: 1, price: 41000, account: 'Broker', date: '2026-02-10',
+    origAmount: 1200, currency: 'USD', fee: 35, feeOrig: 1 });
+  assert.equal(sheets.HoldingTxns.rows[0][13], 'FeeOrig');
+  assert.equal(context.holdingTxnRows()[1].feeOrig, 1);
 });

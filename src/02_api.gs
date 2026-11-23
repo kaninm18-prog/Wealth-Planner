@@ -35,6 +35,11 @@ function route(p) {
       case "refreshPrices":          return jsonResponse(refreshPrices());
       case "setTargets":             return setTargets(p);
       case "setBenchmark":           return setBenchmark(p);
+      case "getTrades":              return jsonResponse(getTrades());
+      case "addTrade":               return addTrade(p);
+      case "deleteTrade":            return deleteTrade(p);
+      case "importTrades":           return importTrades(p);
+      case "importPack":             return importPack(p);
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + p.action });
     }
@@ -46,9 +51,10 @@ function bootstrap(p) {
   try {
     var hld = holdingsData();
     var pf  = portfolioMeta();
+    var tr  = getTrades().trades;
   } finally { _readCache = null; }
   var props = PropertiesService.getScriptProperties();
   return jsonResponse({ ok: true, sheet: SpreadsheetApp.getActiveSpreadsheet().getName(), today: todayStr(),
-    holdings: hld, portfolio: pf,
+    holdings: hld, portfolio: pf, trades: tr,
     prices: { last: props.getProperty("LAST_PRICE_REFRESH") || "", daily: !!props.getProperty("PRICES_DAILY") } });
 }
