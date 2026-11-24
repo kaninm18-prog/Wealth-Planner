@@ -2,6 +2,9 @@
 
 One line per change the user would notice. Newest first.
 
+## 2026-11-24
+- PIN lock: the app opens with a 6-digit PIN, and locks again after 5 minutes in the background (or with "Lock now" in Settings). The access token and the saved exchange rates are kept encrypted on the device. After 5 wrong PINs you wait before the next try; after 10 the app is reset on that device (your data in Google Sheets is untouched). Settings → Change PIN. After this update you are asked to set a PIN once.
+
 ## 2026-11-23
 - Brokers: an opening cash amount, for cash that was already at the broker when you set it up here.
 - Brokers: each broker's cash and total value, its currency, exchange rate and where its dividends are paid (the broker or a Money Tracker bank account). Add, edit and delete brokers.
