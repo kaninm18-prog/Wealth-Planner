@@ -197,3 +197,24 @@ test('lock: rates cache — saved encrypted, unreadable without the key', async 
   const other = await L.lockDeriveKey('999999', L.lockRandom(16), 1000);
   assert.deepEqual(JSON.parse(JSON.stringify(await L.lockLoadRates(s, other))), {});
 });
+
+test('lock: wiring — lock.js loads before core.js, the service worker caches it, nothing writes the plain token', () => {
+  const root = path.join(__dirname, '..');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const order = (html.match(/<script src="js\/[^"]+"/g) || []).map(s => s.slice(13, -1));
+  assert.ok(order.indexOf('js/lock.js') >= 0 && order.indexOf('js/lock.js') < order.indexOf('js/core.js'), 'lock.js before core.js');
+  assert.ok(order.indexOf('js/lockscreen.js') > order.indexOf('js/core.js'), 'lockscreen.js after core.js');
+  const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const shell = (sw.match(/var SHELL = \[([\s\S]*?)\];/) || [])[1] || '';
+  order.forEach(f => assert.ok(shell.includes("'./" + f + "'"), 'sw.js SHELL is missing ' + f));
+  shell.match(/'\.\/[^']+'/g).forEach(f => {
+    const p = f.slice(3, -1);
+    if (p) assert.ok(fs.existsSync(path.join(root, p)), 'sw.js SHELL lists a missing file: ' + p);
+  });
+  const js = fs.readdirSync(path.join(root, 'js')).map(f => fs.readFileSync(path.join(root, 'js', f), 'utf8')).join('\n');
+  assert.ok(!/setItem\(\s*['"]wealthToken['"]/.test(js) && !/setItem\(\s*LOCK_PLAIN_TOKEN/.test(js), 'the token is never written in plain text');
+  assert.ok(!/setItem\(\s*['"]wealthFxRates['"]/.test(js), 'rates are never written in plain text');
+  assert.ok(!/console\.(log|info|debug|warn|error)\(/.test(js), 'no console logging in the front end (PIN, token, key)');
+  // Every key this app writes starts with "wealth" (Money Tracker shares the origin)
+  (js.match(/var LOCK_[A-Z_]*KEY = '[^']+'/g) || []).forEach(m => assert.match(m, /'wealth/));
+});

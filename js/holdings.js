@@ -24,8 +24,12 @@ function holdingById(id) { for (var i = 0; i < holdings.length; i++) if (holding
 
 // ── exchange rates ──
 // Remembered from the last "Refresh prices" (only currencies your holdings are quoted in), so the form can suggest one.
-function savedRates() { try { return JSON.parse(localStorage.getItem('wealthFxRates') || '{}') || {}; } catch(e) { return {}; } }
-function saveRates(r) { try { localStorage.setItem('wealthFxRates', JSON.stringify(Object.assign(savedRates(), r || {}))); } catch(e) {} }
+// Kept in memory (fxRates, js/core.js) while unlocked, and encrypted in storage with the PIN's key (js/lock.js).
+function savedRates() { return fxRates || {}; }
+function saveRates(r) {
+  fxRates = Object.assign({}, fxRates, r || {});
+  if (lockKey) lockSaveRates(localStorage, lockKey, fxRates).catch(function(){});
+}
 // Rate to suggest for a currency: the last refresh, else the rate of your latest entry in that currency.
 function suggestRate(cur) {
   if (cur === 'THB') return 1;
