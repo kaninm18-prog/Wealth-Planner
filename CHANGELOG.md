@@ -3,6 +3,7 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-25
+- Each investment now shows today's price per share (or per unit), next to your average cost; foreign stocks also in their own currency.
 - Refresh prices now works for Thai stocks and gold: when Google Finance has no price (it has none for SET stocks or gold), it comes from Yahoo Finance. Anything still not found says why.
 
 ## 2026-11-24
