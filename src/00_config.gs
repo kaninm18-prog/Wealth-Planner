@@ -35,7 +35,8 @@
 //  Read from Money Tracker: its tab _Export_LinkedFlows → Id | Date | Account | Amount | Currency (deposits − / withdrawals).
 //  Script Properties: BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY,
 //    MONEY_SHEET_ID (Money Tracker's spreadsheet id, set by hand, never in code), MONEY_FLOWS_CACHE (last good flows),
-//    FX_RATES (THB per unit from the last price refresh).
+//    FX_RATES (THB per unit from the last price refresh),
+//    SEC_API_KEY (Thai SEC Open API key for fund NAVs, set by hand, never in code), SEC_FUND_IDS (fund → SEC project id cache).
 // ============================================================
 
 var SHEET = {

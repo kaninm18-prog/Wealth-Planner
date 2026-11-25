@@ -192,6 +192,15 @@ const bootstrap = {
       assert.equal(await page.locator('#tr-lock-warn').isVisible(), true);
       await page.evaluate(() => closeModal('trade-modal'));
     });
+    await check(theme + ': new fund: the hint says funds are priced from the Thai SEC', async () => {
+      await page.evaluate(() => openTrade('buy'));
+      await page.selectOption('#tr-kind', 'fund');
+      assert.match(await page.locator('#tr-new .fx-hint').textContent(), /e\.g\. KFSSF, or SEC:K-USA-A\(A\) for one class — the daily NAV comes from the Thai SEC/);
+      await page.waitForTimeout(450);
+      await fits(page);
+      await shot(page, 'sec-hint-' + theme);
+      await page.evaluate(() => closeModal('trade-modal'));
+    });
     await check(theme + ': lock forgets the folded groups; the Type | Broker choice stays', async () => {
       await page.evaluate(() => openTrade('sell', 'H2'));
       await page.fill('#tr-qty', '900');
