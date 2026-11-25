@@ -421,6 +421,14 @@ main { flex:1; padding:12px 16px calc(var(--nav-h) + 12px); max-width:500px; mar
 .fx-hint { font-size:0.74rem; color:var(--text2); margin-top:5px; }
 .broker-hint { margin:-2px 2px 10px; line-height:1.4; }
 .broker-warn { color:var(--transfer-color); }
+.lock-quick { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; }
+.lock-quick .btn { width:auto; flex:1; padding:6px 8px; }
+.lock-quick .btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.lock-warn { font-size:0.8rem; line-height:1.4; color:var(--text); background:var(--tint-transfer); border:1px solid var(--transfer-color); border-radius:var(--radius-sm); padding:9px 11px; margin:-2px 0 12px; }
+.lock-box { margin-top:10px; padding:10px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.8rem; }
+.lock-box .lock-sum { color:var(--text); font-weight:600; line-height:1.45; }
+.lock-lot { display:flex; justify-content:space-between; gap:8px; padding:5px 0 0; color:var(--text2); font-size:0.74rem; }
+.lock-lot b { color:var(--text); font-weight:600; }
 .account-card-sub { font-size:0.68rem; color:var(--text2); margin-top:1px; }
 .recv-del-btn { margin-top:4px; background:none; color:var(--expense-color); border:none; font-size:0.75rem; cursor:pointer; display:block; }
 

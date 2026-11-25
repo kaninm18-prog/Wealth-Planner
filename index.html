@@ -161,9 +161,19 @@
     </div>
     <div class="fx-hint" id="tr-hint" style="display:block;margin:-4px 0 10px"></div>
     <div style="display:flex;gap:10px">
-      <div class="form-group" style="flex:1"><label class="form-label">Date</label><input type="date" class="form-control" id="tr-date"></div>
+      <div class="form-group" style="flex:1"><label class="form-label">Date</label><input type="date" class="form-control" id="tr-date" onchange="onTradeDate()"></div>
       <div class="form-group" style="flex:1"><label class="form-label">Note</label><input type="text" class="form-control" id="tr-note"></div>
     </div>
+    <div class="form-group" id="tr-lock-group" style="display:none"><label class="form-label" for="tr-lock">Locked until (optional — tax funds such as SSF, ThaiESG)</label>
+      <div class="lock-quick" id="tr-lock-quick">
+        <button type="button" class="btn btn-ghost btn-sm" data-years="10" onclick="setLockYears(10)">+10 years</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-years="8" onclick="setLockYears(8)">+8 years</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-years="5" onclick="setLockYears(5)">+5 years</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-years="0" onclick="setLockYears(0)">None</button>
+      </div>
+      <input type="date" class="form-control" id="tr-lock" oninput="lockYearsPicked(this.value ? -1 : 0)">
+      <div class="fx-hint">From the purchase date. SSF: 10 years. ThaiESG: check your fund — the rule depends on when you bought it. Selling before this date may cost you the tax benefit.</div></div>
+    <div class="lock-warn" id="tr-lock-warn" role="alert" style="display:none"></div>
     <button class="btn btn-primary" id="tr-save" onclick="saveTrade()">Save</button>
     <div style="height:8px"></div>
     <button class="btn btn-ghost" onclick="closeModal('trade-modal')">Cancel</button>

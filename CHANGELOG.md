@@ -3,6 +3,7 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-25
+- Tax funds (SSF, ThaiESG): a buy can have a "Locked until" date (quick +10 / +8 / +5 years, or any date). A holding shows how many units are locked and until when, how many are free, and each purchase with its date. Selling more than the free units shows a warning (you may lose the tax benefit), but you can still save the sale.
 - Home screen: the holdings are grouped by type (stocks, ETFs, funds, gold…) or by broker — switch with Type | Broker at the top of the list. Each group shows its value, unrealised gain/loss and how many holdings it has, and can be folded away. By broker, a holding held at two brokers shows under each with that broker's part.
 - Each investment now shows today's price per share (or per unit), next to your average cost; foreign stocks also in their own currency.
 - Refresh prices now works for Thai stocks and gold: when Google Finance has no price (it has none for SET stocks or gold), it comes from Yahoo Finance. Anything still not found says why.

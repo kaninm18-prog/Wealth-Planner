@@ -14,12 +14,48 @@ function holdingTxnRows() {
     return { rowIndex: ri, id: String(d[0] || ""), holdingId: String(d[1] || ""), date: formatDate(d[2]),
       type: String(d[3] || ""), quantity: toFloat(d[4]), price: toFloat(d[5]), amount: toFloat(d[6]),
       fee: toFloat(d[7]), account: String(d[8] || "").trim(), note: String(d[9] || ""), linkedId: String(d[10] || ""),
-      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]), taxOrig: toFloat(d[14]) };
+      origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]), taxOrig: toFloat(d[14]),
+      lockUntil: formatDate(d[15]) };
   });
 }
 
+// Tax funds (SSF, ThaiESG…): each buy can carry a LockUntil date. Which units are still locked is worked out
+// lot by lot, with sells taken from the OLDEST units first (FIFO by date). That is an assumption to check with
+// the fund house; cost and P/L still use the average-cost method, this only says what can be sold freely.
+// A lot is locked while LockUntil > today; on the LockUntil date itself it is free.
+// → { lots: [{ id, date, quantity, lockUntil, locked }] (what is left of each buy, oldest first),
+//     lockedQty, freeQty, nextUnlock: { date, quantity } | null }
+function lockedLots(mine, today) {
+  var lots = [];
+  mine.forEach(function(t) {
+    if (t.type === "buy") lots.push({ id: t.id, date: t.date, quantity: t.quantity, lockUntil: t.lockUntil || "" });
+    else if (t.type === "sell") {
+      var n = t.quantity;
+      for (var i = 0; i < lots.length && n > 1e-9; i++) {
+        var take = Math.min(lots[i].quantity, n);
+        lots[i].quantity -= take; n -= take;
+      }
+    }
+  });
+  var locked = 0, total = 0, next = null;
+  lots = lots.filter(function(l){ return l.quantity > 1e-9; }).map(function(l) {
+    l.quantity = Math.round(l.quantity * 1e6) / 1e6;
+    l.locked = !!l.lockUntil && l.lockUntil > today;
+    total += l.quantity;
+    if (l.locked) {
+      locked += l.quantity;
+      if (!next || l.lockUntil < next.date) next = { date: l.lockUntil, quantity: 0 };
+    }
+    return l;
+  });
+  if (next) lots.forEach(function(l){ if (l.locked && l.lockUntil === next.date) next.quantity += l.quantity; });
+  if (next) next.quantity = Math.round(next.quantity * 1e6) / 1e6;
+  locked = Math.round(locked * 1e6) / 1e6;
+  return { lots: lots, lockedQty: locked, freeQty: Math.max(0, Math.round((total - locked) * 1e6) / 1e6), nextUnlock: next };
+}
+
 function holdingsData() {
-  var txns = holdingTxnRows();
+  var txns = holdingTxnRows(), today = todayStr();
   var holdings = sheetToRows(getSheet(SHEET.HOLDINGS), function(d, ri) {
     var kind = String(d[2] || "other");
     return { rowIndex: ri, id: String(d[0] || ""), name: String(d[1] || ""), kind: kind,
@@ -50,6 +86,10 @@ function holdingsData() {
     h.priced = !!price;
     h.unrealized = round2(h.value - h.cost);
     h.realized = round2(realized); h.dividends = round2(dividends); h.invested = round2(invested); h.fees = round2(fees); h.taxWithheld = round2(tax);
+    var lk = lockedLots(mine, today);
+    h.lockedQty = lk.lockedQty; h.freeQty = Math.min(lk.freeQty, h.quantity); h.nextUnlock = lk.nextUnlock;
+    // the lots only matter (and are only sent) when some buy of this holding has a LockUntil date
+    h.lots = mine.some(function(t){ return t.type === "buy" && t.lockUntil; }) ? lk.lots : [];
     h.txns = mine.slice().reverse();
     h.autoPrice = h.group === "investment" && !!priceSource(h);
     h.proceeds = round2(mine.reduce(function(a, t){ return a + (t.type === "sell" ? t.amount : 0); }, 0));
@@ -122,6 +162,9 @@ function addHoldingTxn(p) {
   if (amount <= 0) return jsonResponse({ ok: false, error: "Enter an amount" });
   if (type !== "dividend" && qty <= 0) return jsonResponse({ ok: false, error: "Enter a quantity" });
   if (type === "sell" && qty > h.quantity + 1e-9) return jsonResponse({ ok: false, error: "You only hold " + h.quantity + (h.unit ? " " + h.unit : "") });
+  var lockUntil = type === "buy" ? String(p.lockUntil || "").trim() : "";
+  if (lockUntil && !/^\d{4}-\d{2}-\d{2}$/.test(lockUntil)) return jsonResponse({ ok: false, error: "Locked until should be a date (yyyy-MM-dd)" });
+  if (lockUntil && lockUntil <= date) return jsonResponse({ ok: false, error: "Locked until should be after the purchase date" });
   // account may be empty for buy/sell = something you already owned (no cash moves)
   if (!account && (type === "dividend" || fee > 0)) return jsonResponse({ ok: false, error: "Choose an account" });
   var linked = "";                                  // LinkedId: kept for the layout, nothing is linked here
@@ -149,6 +192,12 @@ function addHoldingTxn(p) {
     ensureHeaders(sh, 12, ["OrigAmount", "Currency", "FeeOrig", "TaxOrig"]);
     sh.getRange(r, 13).setValue(String(p.currency).toUpperCase());
     sh.getRange(r, 15).setValue(round2(toFloat(p.taxOrig)));
+  }
+  // Locked until (tax funds), only on buys: the last column (after TaxOrig), added to older tabs when first used
+  if (lockUntil) {
+    ensureHeaders(sh, 12, ["OrigAmount", "Currency", "FeeOrig", "TaxOrig", "LockUntil"]);
+    sh.getRange(r, 16).setNumberFormat("@");
+    sh.getRange(r, 16).setValue(lockUntil);
   }
   // latest trade price becomes the current price, unless a newer price was set by hand
   if (price && type !== "dividend" && (!h.priceDate || date >= h.priceDate)) {

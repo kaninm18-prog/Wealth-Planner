@@ -142,6 +142,35 @@ function renderHoldings() {
   el.innerHTML = html;
 }
 
+// ── locked units (tax funds: SSF, ThaiESG…) ──
+// The backend works out, lot by lot, which units are still locked (sells taken from the oldest units first).
+function addYearsStr(str, n) {
+  var p = String(str).split('-'), y = parseInt(p[0], 10) + n, m = parseInt(p[1], 10), d = parseInt(p[2], 10);
+  var last = new Date(y, m, 0).getDate();                 // 29 Feb + 1 year → 28 Feb
+  return y + '-' + pad(m) + '-' + pad(Math.min(d, last));
+}
+// How many units of a sale of `qty` come out of locked lots, oldest units first (the backend's rule).
+function lockedInSale(h, qty) {
+  if (!h || !(h.lockedQty > 0) || !(qty > 0)) return 0;
+  if (!h.lots || !h.lots.length) return Math.max(0, qty - (h.freeQty || 0));
+  var n = qty, out = 0;
+  h.lots.forEach(function(l) { if (n > 1e-9) { var t = Math.min(l.quantity, n); n -= t; if (l.locked) out += t; } });
+  return Math.round(out * 1e6) / 1e6;
+}
+function lockBoxHtml(h) {
+  if (!h.lots || !h.lots.length || !(h.quantity > 0)) return '';
+  var u = h.unit ? ' ' + recEsc(h.unit) : ' units', dates = h.lots.filter(function(l){ return l.locked; }).map(function(l){ return l.lockUntil; }).sort();
+  var sum = h.lockedQty > 0
+    ? '🔒 Locked: ' + fmtQty(h.lockedQty) + u + ' until ' + fmtDateY(dates[0]) + (dates[dates.length - 1] !== dates[0] ? ' – ' + fmtDateY(dates[dates.length - 1]) : '') +
+      ', free: ' + fmtQty(h.freeQty) + u + '.' +
+      (h.nextUnlock && dates[dates.length - 1] !== dates[0] ? '<br>Next: ' + fmtQty(h.nextUnlock.quantity) + u + ' free on ' + fmtDateY(h.nextUnlock.date) + '.' : '')
+    : '🔓 Nothing locked: all ' + fmtQty(h.quantity) + u + ' are free to sell.';
+  return '<div class="lock-box"><div class="lock-sum">' + sum + '</div>' + h.lots.map(function(l) {
+    return '<div class="lock-lot"><span>Bought ' + fmtDateY(l.date) + ' · <b>' + fmtQty(l.quantity) + '</b> left</span><span>' +
+      (l.locked ? '🔒 until ' + fmtDateY(l.lockUntil) : l.lockUntil ? 'free since ' + fmtDateY(l.lockUntil) : 'not locked') + '</span></div>';
+  }).join('') + '<div class="lock-lot"><span>Sales are counted from the oldest units first.</span></div></div>';
+}
+
 // ── detail ──
 var openHoldingId = null;
 function openHolding(id) {
@@ -167,7 +196,7 @@ function openHolding(id) {
   var priceLabel = asset ? 'Current value (฿)' : 'Current price per ' + (h.unit ? recEsc(h.unit.replace(/s$/, '')) : 'unit') + ' (฿)';
   document.getElementById('hd-body').innerHTML = '<div class="hd-grid">' + stats.map(function(x) {
       return '<div class="hd-stat"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div>' + (x[2] ? '<div class="s">' + x[2] + '</div>' : '') + '</div>';
-    }).join('') + '</div>' +
+    }).join('') + '</div>' + lockBoxHtml(h) +
     (h.quantity > 0 ? '<div class="hd-price"><div class="form-group"><label class="form-label">' + priceLabel + '</label>' +
       '<input type="number" class="form-control" id="hd-price" inputmode="decimal" step="any" value="' + (asset ? (h.value || '') : (h.currentPrice || '')) + '"></div>' +
       '<button class="btn btn-primary btn-sm" style="width:auto" onclick="updateHoldingPrice()">Update</button></div>' : '') +
@@ -180,7 +209,8 @@ function openHolding(id) {
   document.getElementById('hd-edit').style.display = 'none';
   document.getElementById('hd-history').innerHTML = h.txns.length ? h.txns.map(function(t) {
     var what = t.type === 'buy' ? 'Bought' : t.type === 'sell' ? 'Sold' : 'Dividend';
-    var detail = t.type === 'dividend' ? '' : fmtQty(t.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (t.price ? ' @ ' + fmtMoney(t.price) : '');
+    var detail = t.type === 'dividend' ? '' : fmtQty(t.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (t.price ? ' @ ' + fmtMoney(t.price) : '') +
+      (t.lockUntil ? ' · 🔒 until ' + fmtDateY(t.lockUntil) : '');
     return '<div class="hd-txn"><div><div class="t">' + what + (detail ? ' · ' + detail : '') + '</div>' +
       '<div class="d">' + fmtDateY(t.date) + ' · ' + (t.account ? recEsc(t.account) : 'no cash moved') + (t.fee ? (t.type === 'dividend' ? ' · tax ' : ' · fee ') + fmtMoney(t.fee) : '') + (t.note ? ' · ' + recEsc(t.note) : '') + '</div></div>' +
       '<div class="a">' + (t.type === 'buy' ? '−' : '+') + (t.origAmount && t.currency && t.currency !== 'THB'
@@ -257,10 +287,11 @@ function openTrade(type, holdingId) {
   sel.value = holdingId || '';
   document.getElementById('tr-kind').innerHTML = kindOptions();
   document.getElementById('tr-currency').innerHTML = TRADE_CURS.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('');
-  ['tr-name','tr-symbol','tr-unit','tr-qty','tr-price','tr-amount','tr-fee','tr-note'].forEach(function(i){ document.getElementById(i).value = ''; });
+  ['tr-name','tr-symbol','tr-unit','tr-qty','tr-price','tr-amount','tr-fee','tr-note','tr-lock'].forEach(function(i){ document.getElementById(i).value = ''; });
   document.getElementById('tr-amount').dataset.touched = '';
   document.getElementById('tr-kind').value = 'gold';
   document.getElementById('tr-date').value = todayStr();
+  lockYearsPicked(0);
   var h = holdingId ? holdingById(holdingId) : null, last = h && h.txns.length ? h.txns[0].account : '';
   document.getElementById('tr-account').value = last || '';
   fillBrokerList();
@@ -276,6 +307,21 @@ function setTradeCurrency(c) {
 }
 function onTradeHolding() { setTradeCurrency(holdingCur(holdingById(document.getElementById('tr-holding').value))); tradeFormUpdate(); }
 function onTradeCurrency() { setTradeCurrency(tradeCur()); tradeFormUpdate(); }
+// "Locked until": the quick buttons count from the purchase date (and follow it when the date changes).
+function setLockYears(n) {
+  var base = document.getElementById('tr-date').value || todayStr();
+  document.getElementById('tr-lock').value = n ? addYearsStr(base, n) : '';
+  lockYearsPicked(n);
+}
+function lockYearsPicked(n) {             // n: years of the quick button, 0 = None, -1 = a date typed by hand
+  var q = document.getElementById('tr-lock-quick');
+  q.setAttribute('data-years', n);
+  q.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', parseInt(b.getAttribute('data-years'), 10) === n); });
+}
+function onTradeDate() {
+  var n = parseInt(document.getElementById('tr-lock-quick').getAttribute('data-years'), 10);
+  if (n > 0) setLockYears(n);
+}
 function setTradeType(t) {
   tradeType = t;
   tradeFormUpdate();
@@ -298,6 +344,7 @@ function tradeFormUpdate() {
   document.getElementById('tr-rate-group').style.display = cur === 'THB' ? 'none' : '';
   document.getElementById('tr-rate-label').textContent = '1 ' + cur + ' = ฿';
   document.getElementById('tr-qp').style.display = (div || asset) ? 'none' : 'flex';
+  document.getElementById('tr-lock-group').style.display = tradeType === 'buy' && !asset ? '' : 'none';
   document.getElementById('tr-fee-label').textContent = (div ? 'Tax withheld (' : 'Fee (') + cs + ')';
   document.getElementById('tr-fee').placeholder = div ? 'e.g. 10% for Thai stocks' : '0';
   document.getElementById('tr-amount-label').textContent = (div ? 'Dividend received' : asset ? (tradeType === 'sell' ? 'Sold for' : 'Price paid') : 'Total') + ' (' + cs + ')';
@@ -306,7 +353,8 @@ function tradeFormUpdate() {
   document.getElementById('tr-qty-label').textContent = 'Quantity' + (unit && unit !== 'unit' ? ' (' + unit + ')' : '');
   document.getElementById('tr-title').textContent = div ? 'Dividend' : (tradeType === 'sell' ? 'Sell' : (isNew ? 'Add asset / investment' : 'Buy more'));
   var hint = '', rate = tradeRate();
-  if (tradeType === 'sell' && h) hint = 'You hold ' + fmtQty(h.quantity) + (h.unit ? ' ' + h.unit : '') + (h.avgCost ? ' · avg cost ' + fmtMoney(h.avgCost) + (cur !== 'THB' && rate ? ' ≈ ' + fmtCur(h.avgCost / rate, cur) : '') : '') + '.';
+  if (tradeType === 'sell' && h) hint = 'You hold ' + fmtQty(h.quantity) + (h.unit ? ' ' + h.unit : '') + (h.avgCost ? ' · avg cost ' + fmtMoney(h.avgCost) + (cur !== 'THB' && rate ? ' ≈ ' + fmtCur(h.avgCost / rate, cur) : '') : '') + '.' +
+    (h.lockedQty > 0 ? ' Locked: ' + fmtQty(h.lockedQty) + ', free to sell: ' + fmtQty(h.freeQty) + '.' : '');
   else if (div) {
     var acct = document.getElementById('tr-account').value.trim(), to = dividendPaidTo(acct);
     hint = 'Amount after tax. ' + (to ? 'Paid to ' + to + ' (set on the broker), not into ' + acct + '\'s cash.'
@@ -320,6 +368,15 @@ function tradeCalc() {
   var q = parseFloat(document.getElementById('tr-qty').value), p = parseFloat(document.getElementById('tr-price').value);
   var amt = document.getElementById('tr-amount');
   if (amt.dataset.touched !== '1' && q > 0 && p > 0) amt.value = Math.round(q * p * 100) / 100;
+  tradeLockWarn();
+}
+// Selling locked units is allowed (it is your money), but say clearly what it may cost.
+function tradeLockWarn() {
+  var el = document.getElementById('tr-lock-warn'), id = document.getElementById('tr-holding').value, h = id ? holdingById(id) : null;
+  var n = tradeType === 'sell' && h ? lockedInSale(h, parseFloat(document.getElementById('tr-qty').value)) : 0;
+  el.style.display = n > 0 ? '' : 'none';
+  el.textContent = n > 0 ? '⚠ Selling ' + fmtQty(n) + ' locked unit' + (n === 1 ? '' : 's') + ': you may lose the tax benefit and have to pay it back.' +
+    (h.nextUnlock ? ' The next ' + fmtQty(h.nextUnlock.quantity) + ' unlock on ' + fmtDateY(h.nextUnlock.date) + '.' : '') : '';
 }
 function saveTrade() {
   var id = document.getElementById('tr-holding').value, h = id ? holdingById(id) : null;
@@ -339,6 +396,9 @@ function saveTrade() {
     note: document.getElementById('tr-note').value.trim(), id: newClientId(div ? 'WD' : 'X') };   // WD: exported to Money Tracker (C8)
   if (!h) payload.holding = { name: document.getElementById('tr-name').value.trim(), kind: kind,
     symbol: document.getElementById('tr-symbol').value, unit: asset ? '' : (document.getElementById('tr-unit').value.trim() || kindInfo(kind)[4]) };
+  var lock = tradeType === 'buy' && !asset ? document.getElementById('tr-lock').value : '';
+  if (lock && lock <= payload.date) { toast('"Locked until" should be after the purchase date'); return; }
+  if (lock) payload.lockUntil = lock;
   if (!payload.account && (div || payload.fee)) { toast(div ? 'Enter the broker that paid it' : 'Enter the broker the fee was paid at'); return; }
   var cur = tradeCur(), rate = tradeRate();
   if (cur !== 'THB') {                 // typed in a foreign currency → keep the exact amount and fee, store ฿ too
