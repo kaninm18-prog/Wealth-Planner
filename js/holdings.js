@@ -329,7 +329,7 @@ function refreshPricesNow() {
     saveRates(res.rates);
     var msg = res.updated.length ? 'Updated ' + res.updated.length + ' price' + (res.updated.length === 1 ? '' : 's') : 'No prices updated';
     if (res.failed.length) msg += ' · not found: ' + res.failed.join(', ');
-    toast(msg, res.failed.length ? 5000 : 2500);
+    toast(msg, res.failed.length ? 9000 : 2500);              // long enough to read why each one failed
     return loadAll();
   }).catch(function(){ toast('Updating prices needs a connection'); })
     .then(function(){ var b2 = document.getElementById('price-btn'); if (b2) { b2.textContent = '↻ Refresh prices'; b2.disabled = false; } });

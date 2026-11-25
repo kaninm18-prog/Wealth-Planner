@@ -2,7 +2,7 @@
 // The page itself is fetched fresh when online (so updates show up right away)
 // and served from the cache when offline. Calls to Apps Script are never cached.
 // Money Tracker shares this github.io address and its cache storage, so only touch caches named "wealth-planner-…".
-var CACHE = 'wealth-planner-v5';
+var CACHE = 'wealth-planner-v6';
 var SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/lock.js', './js/core.js', './js/lockscreen.js', './js/holdings.js', './js/portfolio.js', './js/brokers.js', './js/settings.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
