@@ -3,49 +3,51 @@
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
-var APP_VERSION = '2026.11.23.3';
+var APP_VERSION = '2026.11.24';
 // Storage keys start with "wealth": Money Tracker lives on the same github.io address and shares localStorage.
+// The URL is kept in plain text (it is useless without the token). The token is only in memory while the app is
+// unlocked; at rest it is in the encrypted vault (js/lock.js). Starting, locking and unlocking: js/lockscreen.js.
 var SCRIPT_URL = '';
 var API_TOKEN  = '';
-try { SCRIPT_URL = localStorage.getItem('wealthScriptUrl') || ''; API_TOKEN = localStorage.getItem('wealthToken') || ''; } catch(e) {}
+try { SCRIPT_URL = localStorage.getItem('wealthScriptUrl') || ''; } catch(e) {}
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
 }
 
-window.addEventListener('DOMContentLoaded', function() {
-  if (!SCRIPT_URL || !API_TOKEN) { show('setup-screen'); return; }
-  hide('setup-screen'); show('app');
-  loadAll();
-});
-
 function show(id) { document.getElementById(id).style.display='flex'; }
 function hide(id) { document.getElementById(id).style.display='none'; }
 
-function saveConnection(url, tok) {
-  try { localStorage.setItem('wealthScriptUrl', url); localStorage.setItem('wealthToken', tok); } catch(e) {}
-  SCRIPT_URL = url; API_TOKEN = tok;
+function saveScriptUrlOnly(url) {
+  try { localStorage.setItem('wealthScriptUrl', url); } catch(e) {}
+  SCRIPT_URL = url;
 }
+// Setup screen: URL + token, then a PIN is set (js/lockscreen.js) before anything is saved for the token.
 function saveScriptUrl() {
   var url = document.getElementById('script-url-input').value.trim();
-  if (url.indexOf('http') !== 0) { toast('Please enter a valid URL'); return; }
+  if (url.indexOf('http') !== 0) { toast('Please enter a valid URL', 0, true); return; }
   var tok = document.getElementById('script-token-input').value.trim();
-  if (!tok) { toast('Paste the access token from setupToken()'); return; }
-  saveConnection(url, tok);
-  hide('setup-screen'); show('app');
-  loadAll();
+  if (!tok) { toast('Paste the access token from setupToken()', 0, true); return; }
+  document.getElementById('script-token-input').value = '';
+  saveScriptUrlOnly(url);
+  pinStartSetup(tok);
 }
+// Settings: a new URL, and a new token if one is typed (empty = keep the saved one). The token is re-encrypted.
 function updateScriptUrl() {
   var url = document.getElementById('settings-url').value.trim();
   if (url.indexOf('http') !== 0) { toast('Please enter a valid URL'); return; }
-  saveConnection(url, document.getElementById('settings-token').value.trim());
-  toast('Connection saved');
-  closeModal('settings-modal');
-  loadAll();
+  var tokEl = document.getElementById('settings-token'), tok = tokEl.value.trim();
+  tokEl.value = '';
+  saveScriptUrlOnly(url);
+  (tok ? lockStoreToken(localStorage, lockKey, tok).then(function(){ API_TOKEN = tok; }) : Promise.resolve()).then(function() {
+    toast('Connection saved');
+    closeModal('settings-modal');
+    loadAll();
+  }).catch(function(){ toast('Could not save the token'); });
 }
 function openSettings() {
   document.getElementById('settings-url').value = SCRIPT_URL;
-  document.getElementById('settings-token').value = API_TOKEN;
+  document.getElementById('settings-token').value = '';     // never put the token back into the page
   document.getElementById('app-version').textContent = 'Version ' + APP_VERSION;
   openModal('settings-modal');
 }
@@ -53,16 +55,27 @@ function openSettings() {
 // ════════════════════════════════════════════
 //  API
 // ════════════════════════════════════════════
+// Requests only go out while unlocked. An answer that arrives after the app was locked (lockEpoch changed) is
+// dropped: the promise never settles, so nothing is rendered and no toast shows on the lock screen.
+function lockedPromise() { return new Promise(function(){}); }
 function rawApi(payload, retries) {
   if (retries === undefined) retries = 2;
+  if (!appOpen) return lockedPromise();
+  var epoch = lockEpoch;
   return fetch(SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(Object.assign({}, payload, { token: API_TOKEN }))
   }).then(function(r){ return r.json(); }).catch(function(err) {
+    if (epoch !== lockEpoch) return lockedPromise();
     if (retries <= 0) throw err;
     return new Promise(function(res){ setTimeout(res, 800 * (3 - retries)); })
-      .then(function(){ return rawApi(payload, retries - 1); });
+      .then(function(){ return epoch !== lockEpoch ? lockedPromise() : rawApi(payload, retries - 1); });
+  }).then(function(res) {
+    return epoch !== lockEpoch ? lockedPromise() : res;
+  }, function(err) {
+    if (epoch !== lockEpoch) return lockedPromise();
+    throw err;
   });
 }
 
@@ -75,8 +88,10 @@ function api(payload, retries) {
 }
 
 // One round-trip on open: holdings, prices, portfolio settings, trades and brokers (once the backend sends them).
-var holdings = [], holdingTotals = { value: 0, cost: 0, unrealized: 0, realized: 0, dividends: 0, investments: 0, assets: 0 };
+var holdings = [], holdingTotals = emptyTotals();
 var priceInfo = null, loaded = false;
+var fxRates = {};                   // last exchange rates (js/holdings.js); kept encrypted at rest
+function emptyTotals() { return { value: 0, cost: 0, unrealized: 0, realized: 0, dividends: 0, investments: 0, assets: 0 }; }
 function loadAll() {
   var st = document.getElementById('home-status');
   return api({ action: 'bootstrap' }).then(function(d) {
@@ -93,6 +108,28 @@ function loadAll() {
   }).catch(function() {
     st.textContent = 'Connection error — reload to retry'; st.style.display = '';
   });
+}
+// On lock: forget everything loaded from the sheet and empty what was rendered from it.
+// Anything new that holds your data (a variable or a part of the page) must be reset here too.
+function clearAppData() {
+  holdings = []; holdingTotals = emptyTotals(); priceInfo = null; loaded = false; fxRates = {};
+  brokerData = null; editBrokerName = null; openHoldingId = null;
+  trades = null; tradesLoading = false; journalOn = true; tjPending = null; packPending = null;
+  portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, tradeCount: 0 };
+  document.querySelectorAll('.modal-overlay.open, .annual-modal-overlay.open').forEach(function(m){ m.classList.remove('open'); });
+  ['header-total-sub', 'home-totals', 'brokers-section', 'hd-title', 'hd-body', 'hd-actions', 'hd-history', 'bk-body', 'bk-title',
+    'pf-body', 'pack-summary', 'tji-summary', 'broker-list', 'tr-holding'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.innerHTML = '';
+  });
+  document.getElementById('header-total').textContent = '฿0';
+  document.getElementById('home-totals').style.display = 'none';
+  document.getElementById('holdings-section').innerHTML = '<div class="loading-wrap"><div class="spinner"></div></div>';
+  var st = document.getElementById('home-status'); st.textContent = 'Connecting…'; st.style.display = '';
+  document.querySelectorAll('#app input, .modal-overlay input, .annual-modal-overlay input, #app textarea, .modal-overlay textarea').forEach(function(i) {
+    if (i.type !== 'button' && i.type !== 'submit') i.value = '';
+  });
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  clearTimeout(toastTimer); document.getElementById('toast').classList.remove('show');
 }
 function renderAll() { renderHome(); renderHoldings(); renderBrokers(); renderPortfolio(); }
 function renderHome() {
@@ -150,7 +187,9 @@ function openModal(id) {
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 var toastTimer;
-function toast(msg, ms) {
+// While locked, only toasts marked `always` (setup and lock screens) show: nothing about your data.
+function toast(msg, ms, always) {
+  if (!appOpen && !always) return;
   var el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
   clearTimeout(toastTimer);

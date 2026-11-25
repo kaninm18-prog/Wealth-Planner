@@ -9,6 +9,7 @@ is Money Tracker's `docs/stage-4-plan.md`. Read it before changing anything here
 | Part | Where | Notes |
 |---|---|---|
 | Front end | `index.html` + `css/app.css` + `js/*.js` | Plain browser scripts, **no build step, no modules, no frameworks**. All functions are global so `onclick="…"` works. |
+| PIN lock | `js/lock.js` (crypto + vault, no DOM) + `js/lockscreen.js` (screens, auto-lock) | The token and cached rates are encrypted at rest (`wealthLock_v1`, `wealthFxRates_v1`). Nothing is requested or shown until unlocked. |
 | Offline shell | `sw.js` | Network-first for the app's own files. Bump `CACHE` when you add/rename a cached file. Only ever delete caches named `wealth-planner-…`. |
 | Back end | `src/*.gs` (Google Apps Script) | One web app, `doPost` → `route(p)` in `src/02_api.gs` dispatches on `p.action`. Files are numbered: Apps Script loads them in name order and they share **one global scope**. |
 | Database | Google Sheet "Wealth Planner" | One tab per data type. Column layout is documented at the top of `src/00_config.gs`. |
@@ -37,6 +38,9 @@ Data flow: app → `api(payload)` in `js/core.js` → POST to the Apps Script UR
   - `npm run check` — both. **Run it before every commit.**
 - Style: match the surrounding code — `var`, `function(){}` callbacks, small helpers, short comments that explain *why*.
   Keep the front end working on older phones (no syntax newer than what's already used).
+- PIN lock: never write the token or anything read from the sheet to `localStorage` in plain text (encrypt it with `lockKey`
+  like `lockSaveRates`, or keep it in memory only). Every new variable or part of the page that holds such data must be
+  emptied in `clearAppData()` (`js/core.js`), which runs on lock. Browser check: `node tests/browser/lock.check.js` (needs Playwright).
 - Helpers in `src/01_helpers.gs` match Money Tracker's, so code can be ported unchanged.
 - New back-end action: add a `case` in `route()` + the function in the right feature file + a test.
 - New tab: add it to `SHEET` and its headers to `HEADERS` in `src/00_config.gs`; if it has an `Id` column, set `ID_COL`.
