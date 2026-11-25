@@ -20,6 +20,12 @@ function plHtml(v, base) {
   return '<span class="' + cls + '">' + (v > 0.005 ? '+' : v < -0.005 ? '−' : '') + fmtMoney(Math.abs(v)) + pct + '</span>';
 }
 function fmtMonY(d) { var p = String(d).split('-'); return SHORT_MON[parseInt(p[1], 10) - 1] + ' ' + p[0].slice(2); }
+// Today's price for one unit (share, baht-weight…): baht, plus the quote currency when it's foreign and its rate is known.
+function unitPriceHtml(h) {
+  if (!h.priced || !h.currentPrice) return '';
+  var q = String(h.quoteCurrency || '').toUpperCase(), r = q && q !== 'THB' ? savedRates()[q] : 0;
+  return 'now ' + fmtMoney(h.currentPrice) + (r ? ' (' + fmtCur(h.currentPrice / r, q) + ')' : '');
+}
 function holdingById(id) { for (var i = 0; i < holdings.length; i++) if (holdings[i].id === id) return holdings[i]; return null; }
 
 // ── exchange rates ──
@@ -67,7 +73,8 @@ function renderHoldings() {
     list.sort(function(a, b){ return b.value - a.value; }).forEach(function(h) {
       var k = kindInfo(h.kind);
       var sub = g[0] === 'investment'
-        ? fmtQty(h.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '')
+        ? fmtQty(h.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '') +
+          (unitPriceHtml(h) ? ' · ' + unitPriceHtml(h) : '')
         : k[2] + (h.priceDate ? ' · valued ' + fmtDate(h.priceDate) : '');
       html += '<div class="hold-card" onclick="openHolding(\'' + escQ(h.id) + '\')">' +
         '<div class="hold-icon">' + k[1] + '</div>' +
