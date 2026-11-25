@@ -58,8 +58,52 @@ function evalFormulas(formulas) {                 // [[f1, f2...], ...] -> value
 }
 function goodNumber(v) { return typeof v === "number" && isFinite(v) && v > 0; }
 
+// ── Second source: Yahoo Finance ─────────────────────────────
+// In Sheets, GOOGLEFINANCE has no data for Thai (SET) stocks or for gold: Arm's sheet showed #N/A for both on
+// 2026-11-25, while currency rates still worked. So anything GOOGLEFINANCE can't price is asked from Yahoo
+// Finance's public chart data instead (no key needed). The first time, Apps Script must be allowed to
+// "connect to an external service": run testPriceSources() once from the editor and approve.
+var YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
+// The Yahoo symbol for a holding, or "" when there is no safe one.
+function yahooSymbol(h) {
+  if (goldUnit(h.symbol, h.unit, h.kind)) return "GC=F";            // gold, USD per troy ounce (futures ≈ spot)
+  var q = quoteSymbol(h.symbol);
+  if (!q || /^CURRENCY:/.test(q)) return "";
+  var m = q.match(/^BKK:(.+)$/);
+  if (m) return m[1] + ".BK";                                        // PTT.BK
+  m = q.match(/^(NASDAQ|NYSE|NYSEARCA|NYSEAMERICAN|BATS):(.+)$/);
+  if (m) return m[2];                                                // US listings: the bare ticker
+  return q.indexOf(":") > 0 ? "" : q;                                // other exchanges: no safe mapping
+}
+// { <symbol>: { price, cur } or { error } } — one request per symbol, all sent at once.
+function yahooQuotes(syms) {
+  var out = {};
+  if (!syms.length) return out;
+  var res;
+  try {
+    res = UrlFetchApp.fetchAll(syms.map(function(s) {
+      return { url: YAHOO_CHART + encodeURIComponent(s) + "?range=1d&interval=1d", muteHttpExceptions: true };
+    }));
+  } catch (e) {
+    var why = /permission|authori[sz]/i.test(String(e.message)) ? "Yahoo not allowed yet — run testPriceSources once in Apps Script"
+                                                               : "Yahoo Finance not reachable";
+    syms.forEach(function(s){ out[s] = { error: why }; });
+    return out;
+  }
+  res.forEach(function(r, i) {
+    var s = syms[i];
+    try {
+      if (r.getResponseCode() !== 200) { out[s] = { error: "Yahoo answered " + r.getResponseCode() }; return; }
+      var meta = JSON.parse(r.getContentText()).chart.result[0].meta;
+      out[s] = goodNumber(meta.regularMarketPrice) ? { price: meta.regularMarketPrice, cur: String(meta.currency || "").toUpperCase() }
+                                                   : { error: "no price from Yahoo" };
+    } catch (e) { out[s] = { error: "unexpected answer from Yahoo" }; }
+  });
+  return out;
+}
+
 function refreshPrices() {
-  var today = todayStr(), result = { ok: true, updated: [], failed: [], rates: {} };
+  var today = todayStr(), result = { ok: true, updated: [], failed: [], rates: {}, sources: {} };
   var hs = getSheet(SHEET.HOLDINGS);
   var data = holdingsData().holdings.filter(function(h){ return h.autoPrice && h.quantity > 0; });
   // 1) prices + their currency
@@ -68,9 +112,21 @@ function refreshPrices() {
     var q = srcs[i].q.replace(/"/g, "");
     return ['="' + q + '"', '=IFERROR(GOOGLEFINANCE("' + q + '","price"),"")', '=IFERROR(GOOGLEFINANCE("' + q + '","currency"),"")'];
   }));
+  var why = {};                                   // holding index → why it has no price
   px.forEach(function(r, i) {                     // apply gold unit factor; known quote currency wins
     if (goodNumber(r[1])) r[1] = r[1] * srcs[i].factor;
     if (srcs[i].cur) r[2] = srcs[i].cur;
+  });
+  // 1b) what GOOGLEFINANCE couldn't price: Yahoo Finance
+  var ySym = data.map(function(h, i){ return goodNumber(px[i][1]) ? "" : yahooSymbol(h); });
+  var yq = yahooQuotes(ySym.filter(function(s, i){ return s && ySym.indexOf(s) === i; }));
+  data.forEach(function(h, i) {
+    if (goodNumber(px[i][1])) { result.sources[h.name] = "Google Finance"; return; }
+    var q = ySym[i] ? yq[ySym[i]] : null;
+    if (q && q.price) {
+      px[i][1] = q.price * srcs[i].factor; px[i][2] = srcs[i].cur || q.cur;
+      result.sources[h.name] = "Yahoo Finance (" + ySym[i] + ")";
+    } else why[i] = ySym[i] ? (q && q.error) || "no price" : "no price from Google Finance, and no other source for this symbol";
   });
   // 2) exchange rates for every non-THB quote currency and broker currency
   var curs = {}, brokers = brokerRows();
@@ -81,6 +137,9 @@ function refreshPrices() {
     return ['="' + c + '"', '=IFERROR(GOOGLEFINANCE("CURRENCY:' + c + 'THB"),"")', '=""'];
   }));
   curList.forEach(function(c, i){ if (goodNumber(fx[i][1])) result.rates[c] = fx[i][1]; });
+  var fxMiss = curList.filter(function(c){ return !result.rates[c]; });     // e.g. USDTHB=X on Yahoo
+  var fq = yahooQuotes(fxMiss.map(function(c){ return c + "THB=X"; }));
+  fxMiss.forEach(function(c){ var q = fq[c + "THB=X"]; if (q && q.price) result.rates[c] = q.price; });
   // broker Rates (a currency that wasn't found keeps its last rate) and the rates for the cash ledger
   var bs = getSheet(SHEET.BROKERS);
   brokers.forEach(function(b) {
@@ -98,7 +157,12 @@ function refreshPrices() {
     var price = px[i] ? px[i][1] : "", cur = String(px[i] ? px[i][2] : "").toUpperCase() || "THB";
     if (goodNumber(price) && cur === "GBX") { price = price / 100; cur = "GBP"; }   // London quotes in pence
     var thb = goodNumber(price) ? (cur === "THB" ? price : (result.rates[cur] ? price * result.rates[cur] : 0)) : 0;
-    if (!thb) { result.failed.push(h.name + (h.symbol ? " (" + h.symbol + ")" : "")); return; }
+    if (!thb) {
+      var reason = why[i] || (goodNumber(price) ? "no " + cur + " → THB rate" : "no price");
+      result.failed.push(h.name + (h.symbol ? " (" + h.symbol + ")" : "") + ": " + reason);
+      delete result.sources[h.name];
+      return;
+    }
     var row = resolveRow(SHEET.HOLDINGS, { id: h.id });
     if (!row) return;
     hs.getRange(row, 7).setNumberFormat("@");
@@ -110,6 +174,26 @@ function refreshPrices() {
   try { result.benchmark = fetchBenchmark(); } catch (e) { result.benchmark = { ok: false, error: e.message }; }
   PropertiesService.getScriptProperties().setProperty("LAST_PRICE_REFRESH", new Date().toISOString());
   return result;
+}
+
+// Run once from the Apps Script editor (▶ testPriceSources): shows where each price would come from, without
+// saving anything. The first run also asks Google for permission to reach Yahoo Finance — approve it.
+function testPriceSources() {
+  var hs = holdingsData().holdings.filter(function(h){ return h.autoPrice && h.quantity > 0; });
+  var g = evalFormulas(hs.map(function(h) {
+    var q = priceSource(h).q.replace(/"/g, "");
+    return ['="' + q + '"', '=IFERROR(GOOGLEFINANCE("' + q + '","price"),"")', '=""'];
+  }));
+  var ys = hs.map(yahooSymbol), yq = yahooQuotes(ys.filter(function(s, i){ return s && ys.indexOf(s) === i; }));
+  var lines = hs.map(function(h, i) {
+    var q = ys[i] ? yq[ys[i]] : null;
+    return h.name + " — Google Finance: " + (goodNumber(g[i][1]) ? g[i][1] : "none") +
+      " · Yahoo " + (ys[i] || "(no symbol)") + ": " + (q ? (q.price ? q.price + " " + q.cur : q.error) : "not asked");
+  });
+  var usd = yahooQuotes(["USDTHB=X"])["USDTHB=X"];
+  lines.push("USD → THB on Yahoo: " + (usd && usd.price ? usd.price : (usd && usd.error)));
+  Logger.log(lines.join("\n") || "No holdings with automatic prices.");
+  return lines;
 }
 
 // Daily job (set up by setupAutomation): refresh prices, then rebuild the exports for Money Tracker

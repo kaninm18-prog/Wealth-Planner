@@ -263,7 +263,7 @@ test('refreshPrices: converts to baht, applies the gold factor, records the quot
   const res = api({ action: 'refreshPrices' });
   assert.ok(res.ok);
   assert.deepEqual(res.updated.sort(), ['AAPL', 'Gold bar', 'PTT']);
-  assert.deepEqual(res.failed, ['Mystery (NOPE)']);
+  assert.deepEqual(res.failed, ['Mystery (NOPE): Yahoo Finance not reachable'], 'tried Yahoo (unreachable in tests) and says so');
   assert.deepEqual(JSON.parse(JSON.stringify(res.rates)), { USD: 35 });
   assert.ok(!asked.includes('Car'), 'assets are not priced');
   near(holding('PTT').currentPrice, 32);
@@ -340,4 +340,124 @@ test('new dividends get a WD… Id (plan C8), other entries X…; TaxOrig (C6) k
   assert.equal(row[14], 0.3); assert.equal(row[12], 'USD'); assert.equal(row[7], 10.5, 'Fee (tax) stays in THB');
   const kept = api({ action: 'addHoldingTxn', id: 'X0000000001', type: 'dividend', holdingId: r.holdingId, amount: 5, account: 'IBKR', date: '2026-02-02' });
   assert.equal(kept.id, 'X0000000001', 'an Id sent with the entry is kept (old Ids from Money Tracker)');
+});
+
+// ── Prices: Yahoo Finance when GOOGLEFINANCE has nothing (Thai stocks and gold give #N/A in Sheets) ──
+function yahooStub(context, quotes, opts) {
+  const asked = [];
+  context.UrlFetchApp = { fetchAll(reqs) {
+    if (opts && opts.deny) throw new Error('You do not have permission to call UrlFetchApp.fetchAll');
+    return reqs.map(r => {
+      const sym = decodeURIComponent(r.url.split('/chart/')[1].split('?')[0]);
+      asked.push(sym);
+      const q = quotes[sym];
+      const body = q ? JSON.stringify({ chart: { result: [{ meta: { symbol: sym, regularMarketPrice: q[0], currency: q[1] } }] } }) : '{"chart":{"result":null}}';
+      return { getResponseCode: () => (q ? 200 : 404), getContentText: () => body };
+    });
+  } };
+  return asked;
+}
+function googleNothing(context, fx) {
+  context.evalFormulas = formulas => formulas.map(f => {
+    const label = f[0].replace(/^="|"$/g, '');
+    if (/CURRENCY:/.test(f[1]) && label.length === 3) return [label, (fx || {})[label] || '', ''];
+    return [label, '', ''];                                   // #N/A → IFERROR → ""
+  });
+}
+
+test('refreshPrices: Thai stocks and gold come from Yahoo when GOOGLEFINANCE has nothing', () => {
+  const { api, context, holding, buyNew } = setup();
+  buyNew('PTT', 'stock', 100, 30, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('PTT').id, symbol: 'PTT.BK' });
+  buyNew('SCB', 'stock', 10, 100, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('SCB').id, symbol: 'BKK:SCB' });
+  buyNew('Gold bar', 'gold', 0.5, 34172.77, '', '2026-02-20');
+  api({ action: 'updateHolding', id: holding('Gold bar').id, unit: 'baht' });
+  googleNothing(context, { USD: 33.9 });
+  const asked = yahooStub(context, { 'PTT.BK': [33.25, 'THB'], 'SCB.BK': [118.5, 'THB'], 'GC=F': [2650, 'USD'] });
+  const res = api({ action: 'refreshPrices' });
+  assert.deepEqual(res.failed, []);
+  assert.deepEqual(res.updated.sort(), ['Gold bar', 'PTT', 'SCB']);
+  assert.deepEqual(asked.sort(), ['GC=F', 'PTT.BK', 'SCB.BK'], 'one request per symbol');
+  near(holding('PTT').currentPrice, 33.25);
+  near(holding('SCB').currentPrice, 118.5);
+  near(holding('Gold bar').currentPrice, 2650 * 0.47295 * 33.9, 'USD/oz × baht-weight factor × USD rate');
+  assert.equal(res.sources.PTT, 'Yahoo Finance (PTT.BK)');
+});
+
+test('refreshPrices: GOOGLEFINANCE stays first; Yahoo is only asked for what it missed', () => {
+  const { api, context, holding, buyNew } = setup();
+  buyNew('AAPL', 'stock', 1, 7000, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('AAPL').id, symbol: 'NASDAQ:AAPL' });
+  context.evalFormulas = formulas => formulas.map(f => {
+    const label = f[0].replace(/^="|"$/g, '');
+    if (label === 'USD') return [label, 35, ''];
+    return [label, label === 'NASDAQ:AAPL' ? 200 : '', label === 'NASDAQ:AAPL' ? 'USD' : ''];
+  });
+  const asked = yahooStub(context, {});
+  const res = api({ action: 'refreshPrices' });
+  assert.deepEqual(asked, [], 'nothing to ask Yahoo');
+  assert.equal(res.sources.AAPL, 'Google Finance');
+  near(holding('AAPL').currentPrice, 7000);
+});
+
+test('refreshPrices: a missing exchange rate comes from Yahoo (USDTHB=X)', () => {
+  const { api, context, holding, buyNew } = setup();
+  buyNew('Gold bar', 'gold', 1, 40000, '', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('Gold bar').id, unit: 'baht' });
+  googleNothing(context, {});
+  yahooStub(context, { 'GC=F': [2600, 'USD'], 'USDTHB=X': [34, 'THB'] });
+  const res = api({ action: 'refreshPrices' });
+  assert.deepEqual(JSON.parse(JSON.stringify(res.rates)), { USD: 34 });
+  near(holding('Gold bar').currentPrice, 2600 * 0.47295 * 34);
+});
+
+test('refreshPrices: each failure says why', () => {
+  const { api, context, holding, buyNew } = setup();
+  buyNew('Ghost', 'stock', 1, 10, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('Ghost').id, symbol: 'GHOST.BK' });
+  buyNew('Euro thing', 'stock', 1, 10, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('Euro thing').id, symbol: 'EPA:MC' });
+  googleNothing(context, {});
+  yahooStub(context, {});
+  const res = api({ action: 'refreshPrices' });
+  assert.deepEqual(res.failed.sort(), [
+    'Euro thing (EPA:MC): no price from Google Finance, and no other source for this symbol',
+    'Ghost (GHOST.BK): Yahoo answered 404',
+  ]);
+});
+
+test('refreshPrices: before Yahoo is approved, the message says how to approve it', () => {
+  const { api, context, holding, buyNew } = setup();
+  buyNew('PTT', 'stock', 1, 30, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('PTT').id, symbol: 'PTT.BK' });
+  googleNothing(context, {});
+  yahooStub(context, {}, { deny: true });
+  const res = api({ action: 'refreshPrices' });
+  assert.match(res.failed[0], /run testPriceSources once in Apps Script/);
+});
+
+test('testPriceSources reports both sources and saves nothing', () => {
+  const { context, sheets, holding, api, buyNew } = setup();
+  buyNew('PTT', 'stock', 1, 30, 'Broker', '2026-01-10');
+  api({ action: 'updateHolding', id: holding('PTT').id, symbol: 'PTT.BK' });
+  googleNothing(context, {});
+  yahooStub(context, { 'PTT.BK': [33, 'THB'], 'USDTHB=X': [34, 'THB'] });
+  const before = JSON.stringify(sheets.Holdings.rows);
+  const lines = context.testPriceSources();
+  assert.match(lines[0], /^PTT — Google Finance: none · Yahoo PTT\.BK: 33 THB$/);
+  assert.match(lines[1], /USD → THB on Yahoo: 34/);
+  assert.equal(JSON.stringify(sheets.Holdings.rows), before);
+});
+
+test('yahooSymbol: Thai and US listings, gold; nothing for other exchanges or currencies', () => {
+  const { context } = setup();
+  const y = h => context.yahooSymbol(Object.assign({ kind: 'stock', unit: '' }, h));
+  assert.equal(y({ symbol: 'PTT.BK' }), 'PTT.BK');
+  assert.equal(y({ symbol: 'BKK:CPALL' }), 'CPALL.BK');
+  assert.equal(y({ symbol: 'NASDAQ:AAPL' }), 'AAPL');
+  assert.equal(y({ symbol: 'VOO' }), 'VOO');
+  assert.equal(y({ symbol: '', kind: 'gold', unit: 'baht' }), 'GC=F');
+  assert.equal(y({ symbol: 'EPA:MC' }), '');
+  assert.equal(y({ symbol: 'CURRENCY:BTCTHB' }), '');
 });

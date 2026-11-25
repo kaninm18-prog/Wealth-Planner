@@ -2,6 +2,9 @@
 
 One line per change the user would notice. Newest first.
 
+## 2026-11-25
+- Refresh prices now works for Thai stocks and gold: when Google Finance has no price (it has none for SET stocks or gold), it comes from Yahoo Finance. Anything still not found says why.
+
 ## 2026-11-24
 - PIN lock: the app opens with a 6-digit PIN, and locks again after 5 minutes in the background (or with "Lock now" in Settings). The access token and the saved exchange rates are kept encrypted on the device. After 5 wrong PINs you wait before the next try; after 10 the app is reset on that device (your data in Google Sheets is untouched). Settings → Change PIN. After this update you are asked to set a PIN once.
 
