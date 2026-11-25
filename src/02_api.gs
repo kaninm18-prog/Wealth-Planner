@@ -24,7 +24,7 @@ function doGet() {
 }
 
 // Writes that change what Money Tracker reads: the export tabs are rebuilt after each of them (plan section 3).
-var EXPORT_AFTER = { addHolding: 1, updateHolding: 1, deleteHolding: 1, addHoldingTxn: 1, deleteHoldingTxn: 1, refreshPrices: 1,
+var EXPORT_AFTER = { addHolding: 1, updateHolding: 1, deleteHolding: 1, addHoldingTxn: 1, deleteHoldingTxn: 1, addSwitch: 1, refreshPrices: 1,
   addTrade: 1, deleteTrade: 1, importTrades: 1, importPack: 1, setBroker: 1, deleteBroker: 1 };
 
 function route(p) {
@@ -42,6 +42,7 @@ function dispatch(p) {
       case "deleteHolding":          return deleteHolding(p);
       case "addHoldingTxn":          return addHoldingTxn(p);
       case "deleteHoldingTxn":       return deleteHoldingTxn(p);
+      case "addSwitch":              return addSwitch(p);
       case "refreshPrices":          return jsonResponse(refreshPrices());
       case "setTargets":             return setTargets(p);
       case "setBenchmark":           return setBenchmark(p);

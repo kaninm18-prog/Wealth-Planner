@@ -3,6 +3,7 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-25
+- Switch a fund into another (e.g. SSF → SSF, ThaiESG → ThaiESG) in one step: Holding → Switch. The original cost is carried over, so no profit or loss is booked and the broker's cash doesn't change (except a fee). Locked units keep their lock dates in the new fund, oldest units first. The history shows "Switched to / from" and what the switch was worth; deleting it removes both sides.
 - Tax funds (SSF, ThaiESG): a buy can have a "Locked until" date (quick +10 / +8 / +5 years, or any date). A holding shows how many units are locked and until when, how many are free, and each purchase with its date. Selling more than the free units shows a warning (you may lose the tax benefit), but you can still save the sale.
 - Home screen: the holdings are grouped by type (stocks, ETFs, funds, gold…) or by broker — switch with Type | Broker at the top of the list. Each group shows its value, unrealised gain/loss and how many holdings it has, and can be folded away. By broker, a holding held at two brokers shows under each with that broker's part.
 - Each investment now shows today's price per share (or per unit), next to your average cost; foreign stocks also in their own currency.

@@ -204,13 +204,19 @@ function openHolding(id) {
   var acts = asset ? '' : '<button class="btn btn-primary btn-sm" onclick="openTrade(\'buy\', \'' + escQ(id) + '\')">Buy more</button>';
   if (h.quantity > 0) acts += '<button class="btn btn-ghost btn-sm" onclick="openTrade(\'sell\', \'' + escQ(id) + '\')">Sell</button>';
   if (!asset) acts += '<button class="btn btn-ghost btn-sm" onclick="openTrade(\'dividend\', \'' + escQ(id) + '\')">Dividend</button>';
+  if (!asset && h.quantity > 0) acts += '<button class="btn btn-ghost btn-sm" onclick="openSwitch(\'' + escQ(id) + '\')">Switch</button>';
   acts += '<button class="btn btn-ghost btn-sm" onclick="toggleHoldingEdit()">Edit</button>';
   document.getElementById('hd-actions').innerHTML = acts;
   document.getElementById('hd-edit').style.display = 'none';
   document.getElementById('hd-history').innerHTML = h.txns.length ? h.txns.map(function(t) {
-    var what = t.type === 'buy' ? 'Bought' : t.type === 'sell' ? 'Sold' : 'Dividend';
-    var detail = t.type === 'dividend' ? '' : fmtQty(t.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (t.price ? ' @ ' + fmtMoney(t.price) : '') +
-      (t.lockUntil ? ' · 🔒 until ' + fmtDateY(t.lockUntil) : '');
+    var what = t.type === 'buy' ? 'Bought' : t.type === 'sell' ? 'Sold' : 'Dividend', peer = t.switchId ? switchPeer(t) : null;
+    if (t.switchId) what = (t.type === 'sell' ? 'Switched to ' : 'Switched from ') + recEsc(peer ? peer.name : 'another fund');
+    var detail = t.type === 'dividend' ? '' : fmtQty(t.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (t.price && !t.switchId ? ' @ ' + fmtMoney(t.price) : '') +
+      (t.switchId && t.switchValue ? ' · worth ' + fmtMoney(t.switchValue) : '') + (t.lockUntil ? ' · 🔒 until ' + fmtDateY(t.lockUntil) : '');
+    if (t.switchId) return '<div class="hd-txn"><div><div class="t">' + what + ' · ' + detail + '</div>' +
+      '<div class="d">' + fmtDateY(t.date) + (t.account ? ' · ' + recEsc(t.account) : '') + (t.fee ? ' · fee ' + fmtMoney(t.fee) : '') + (t.note ? ' · ' + recEsc(t.note) : '') + '</div></div>' +
+      '<div class="a">' + fmtMoney(t.amount) + '<div class="d">cost carried</div></div>' +
+      '<button title="Delete" onclick="deleteHoldingTxn(\'' + escQ(t.id) + '\')">✕</button></div>';
     return '<div class="hd-txn"><div><div class="t">' + what + (detail ? ' · ' + detail : '') + '</div>' +
       '<div class="d">' + fmtDateY(t.date) + ' · ' + (t.account ? recEsc(t.account) : 'no cash moved') + (t.fee ? (t.type === 'dividend' ? ' · tax ' : ' · fee ') + fmtMoney(t.fee) : '') + (t.note ? ' · ' + recEsc(t.note) : '') + '</div></div>' +
       '<div class="a">' + (t.type === 'buy' ? '−' : '+') + (t.origAmount && t.currency && t.currency !== 'THB'
@@ -255,13 +261,97 @@ function updateHoldingPrice() {
   holdingCall({ action: 'updateHolding', id: openHoldingId, currentPrice: price, priceDate: todayStr() }, 'Value updated');
 }
 function deleteHoldingTxn(id) {
-  if (!confirm('Delete this entry?')) return;
+  var t = null;
+  holdings.forEach(function(h){ h.txns.forEach(function(x){ if (x.id === id) t = x; }); });
+  if (!confirm(t && t.switchId ? 'Delete this switch? Both funds\' entries are removed.' : 'Delete this entry?')) return;
   holdingCall({ action: 'deleteHoldingTxn', id: id }, 'Deleted');
 }
 function deleteHolding() {
   var h = holdingById(openHoldingId); if (!h) return;
   if (!confirm('Delete "' + h.name + '" and all its buys, sales and dividends?')) return;
   holdingCall({ action: 'deleteHolding', id: openHoldingId }, 'Deleted').then(function(){ closeModal('holding-modal'); });
+}
+
+// ── fund switch (src/17_switch.gs) ──
+// The original cost is carried over (Arm's choice for switches): no profit or loss is booked, broker cash doesn't
+// change (except a fee), and lock dates follow the units switched out, oldest first.
+function switchPeer(t) {                    // the holding on the other side of a switch
+  var out = null;
+  holdings.forEach(function(h){ h.txns.forEach(function(x) {
+    if (x.switchId === t.switchId && x.type !== t.type && !out) out = h;
+  }); });
+  return out;
+}
+function openSwitch(fromId) {
+  var funds = holdings.filter(function(h){ return h.group === 'investment' && h.quantity > 0; });
+  document.getElementById('sw-from').innerHTML = funds.map(function(h) {
+    return '<option value="' + escAttr(h.id) + '">' + kindInfo(h.kind)[1] + ' ' + recEsc(h.name) + ' (' + fmtQty(h.quantity) + ')</option>';
+  }).join('');
+  document.getElementById('sw-from').value = fromId;
+  ['sw-name','sw-symbol','sw-out','sw-in','sw-value','sw-fee','sw-note'].forEach(function(i){ document.getElementById(i).value = ''; });
+  document.getElementById('sw-date').value = todayStr();
+  var h = holdingById(fromId);
+  document.getElementById('sw-account').value = h && h.txns.length ? h.txns[0].account : '';
+  fillBrokerList();
+  closeModal('holding-modal');
+  switchFormUpdate(true);
+  openModal('switch-modal');
+}
+function switchFormUpdate(refill) {
+  var fromId = document.getElementById('sw-from').value, h = holdingById(fromId), toSel = document.getElementById('sw-to');
+  if (refill === true || toSel.querySelector('option[value="' + fromId.replace(/"/g, '') + '"]')) {
+    var keep = toSel.value;
+    toSel.innerHTML = '<option value="">➕ New fund…</option>' + holdings.filter(function(x){ return x.group === 'investment' && x.id !== fromId; })
+      .map(function(x){ return '<option value="' + escAttr(x.id) + '">' + kindInfo(x.kind)[1] + ' ' + recEsc(x.name) + '</option>'; }).join('');
+    toSel.value = keep && keep !== fromId ? keep : '';
+  }
+  document.getElementById('sw-new').style.display = toSel.value ? 'none' : '';
+  var out = parseFloat(document.getElementById('sw-out').value), inn = parseFloat(document.getElementById('sw-in').value);
+  var date = document.getElementById('sw-date').value || todayStr(), u = h && h.unit ? ' ' + recEsc(h.unit) : ' units', html = '';
+  if (h) {
+    html = 'You hold ' + fmtQty(h.quantity) + u + (h.lockedQty > 0 ? ' (' + fmtQty(h.lockedQty) + ' locked)' : '') + '.';
+    if (out > 0) {
+      var cost = out >= h.quantity - 1e-9 ? h.cost : h.cost / h.quantity * out;
+      html += '<br>Cost carried over: <b>' + fmtMoney(Math.round(cost * 100) / 100) + '</b> (avg ' + fmtMoney(h.avgCost) + ' × ' + fmtQty(out) + '). No profit or loss is booked, and the broker\'s cash doesn\'t change' +
+        (parseFloat(document.getElementById('sw-fee').value) > 0 ? ' except the fee' : '') + '.';
+      if (out > h.quantity + 1e-9) html += '<br>⚠ More than you hold.';
+      var left = out, by = {}, order = [];
+      (h.lots && h.lots.length ? h.lots : [{ quantity: h.quantity, lockUntil: '' }]).forEach(function(l) {
+        if (left <= 1e-9) return;
+        var q = Math.min(l.quantity, left), k = l.lockUntil && l.lockUntil > date ? l.lockUntil : '';
+        left -= q; if (!(k in by)) { by[k] = 0; order.push(k); } by[k] += q;
+      });
+      html += order.map(function(k) {
+        var got = inn > 0 ? ' → ' + fmtQty(Math.round(inn * by[k] / out * 1e6) / 1e6) + ' new' : '';
+        return '<div class="lock-lot"><span>' + fmtQty(by[k]) + u + got + '</span><span>' + (k ? '🔒 until ' + fmtDateY(k) : 'free') + '</span></div>';
+      }).join('') + '<div class="lock-lot"><span>Units go oldest first; the new units keep their lock dates.</span></div>';
+    }
+  }
+  document.getElementById('sw-preview').innerHTML = html;
+}
+function saveSwitch() {
+  var fromId = document.getElementById('sw-from').value, toId = document.getElementById('sw-to').value;
+  var out = parseFloat(document.getElementById('sw-out').value), inn = parseFloat(document.getElementById('sw-in').value);
+  if (!toId && !document.getElementById('sw-name').value.trim()) { toast('Enter the new fund\'s name'); return; }
+  if (!(out > 0)) { toast('Enter the units switched out'); return; }
+  if (!(inn > 0)) { toast('Enter the units received'); return; }
+  var from = holdingById(fromId);
+  var payload = { action: 'addSwitch', id: newClientId('SW'), fromId: fromId, toId: toId, unitsOut: out, unitsIn: inn,
+    value: parseFloat(document.getElementById('sw-value').value) || 0, fee: parseFloat(document.getElementById('sw-fee').value) || 0,
+    account: document.getElementById('sw-account').value.trim(), date: document.getElementById('sw-date').value || todayStr(),
+    note: document.getElementById('sw-note').value.trim() };
+  if (!toId) payload.toHolding = { name: document.getElementById('sw-name').value.trim(), symbol: document.getElementById('sw-symbol').value,
+    kind: from ? from.kind : 'fund', unit: from ? from.unit : 'units' };
+  if (payload.fee && !payload.account) { toast('Enter the broker the fee was paid at'); return; }
+  var btn = document.getElementById('sw-save'); btn.textContent = 'Saving…';
+  api(payload).then(function(res) {
+    btn.textContent = 'Save switch';
+    if (!res.ok) { apiError(res); return; }
+    closeModal('switch-modal');
+    toast('Switch saved');
+    openHoldingId = res.toId;
+    loadAll().then(function(){ if (holdingById(openHoldingId)) openHolding(openHoldingId); });
+  }).catch(function(){ btn.textContent = 'Save switch'; toast('Needs a connection'); });
 }
 
 // ── buy / sell / dividend form ──
