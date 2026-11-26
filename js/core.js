@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
-var APP_VERSION = '2026.11.25.2';
+var APP_VERSION = '2026.11.25.3';
 // Storage keys start with "wealth": Money Tracker lives on the same github.io address and shares localStorage.
 // The URL is kept in plain text (it is useless without the token). The token is only in memory while the app is
 // unlocked; at rest it is in the encrypted vault (js/lock.js). Starting, locking and unlocking: js/lockscreen.js.
@@ -113,7 +113,7 @@ function loadAll() {
 // Anything new that holds your data (a variable or a part of the page) must be reset here too.
 function clearAppData() {
   holdings = []; holdingTotals = emptyTotals(); priceInfo = null; loaded = false; fxRates = {};
-  brokerData = null; editBrokerName = null; openHoldingId = null;
+  brokerData = null; editBrokerName = null; openHoldingId = null; holdCollapsed = {};
   trades = null; tradesLoading = false; journalOn = true; tjPending = null; packPending = null;
   portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, tradeCount: 0 };
   document.querySelectorAll('.modal-overlay.open, .annual-modal-overlay.open').forEach(function(m){ m.classList.remove('open'); });

@@ -60,29 +60,62 @@ function fillBrokerList() {
   document.getElementById('broker-list').innerHTML = brokerNames().map(function(n){ return '<option value="' + escAttr(n) + '">'; }).join('');
 }
 
+// ── grouping on the home screen (js/grouping.js) ──
+// Type | Broker is a display choice, not data: plain localStorage is fine. Which groups are folded is kept in
+// memory only (broker names are data), so it is forgotten on lock (clearAppData) and on reload.
+var holdGroupMode = 'type';
+try { holdGroupMode = localStorage.getItem('wealthHoldGroup') === 'broker' ? 'broker' : 'type'; } catch(e) {}
+var holdCollapsed = {};             // group key → true when folded; memory only
+function setHoldGroupMode(m) {
+  holdGroupMode = m === 'broker' ? 'broker' : 'type';
+  try { localStorage.setItem('wealthHoldGroup', holdGroupMode); } catch(e) {}
+  renderHoldings();
+}
+function toggleHoldGroup(i) {
+  var el = document.querySelectorAll('#holdings-section .hold-group')[i];
+  if (!el) return;
+  var key = el.getAttribute('data-key'), shut = !holdCollapsed[key];
+  if (shut) holdCollapsed[key] = true; else delete holdCollapsed[key];
+  el.classList.toggle('shut', shut);
+  el.querySelector('.hold-group-head').setAttribute('aria-expanded', shut ? 'false' : 'true');
+}
+// One holding's card. `it` is its part in the group (js/grouping.js): by broker, only what that broker holds.
+function holdCardHtml(it) {
+  var h = it.h, k = kindInfo(h.kind), inv = h.group === 'investment';
+  var sub = inv
+    ? fmtQty(it.qty) + (h.unit ? ' ' + recEsc(h.unit) : '') + (it.split ? ' of ' + fmtQty(h.quantity) : '') +
+      (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '') + (unitPriceHtml(h) ? ' · ' + unitPriceHtml(h) : '')
+    : k[2] + (h.priceDate ? ' · valued ' + fmtDate(h.priceDate) : '');
+  return '<div class="hold-card" onclick="openHolding(\'' + escQ(h.id) + '\')">' +
+    '<div class="hold-icon">' + k[1] + '</div>' +
+    '<div style="min-width:0"><div class="hold-name">' + recEsc(h.name) + (h.symbol ? ' <span class="hold-sub">' + recEsc(h.symbol) + '</span>' : '') + '</div>' +
+    '<div class="hold-sub">' + sub + (h.autoPrice ? ' · <span class="live-badge">live</span>' : (!h.priced && inv ? ' · no price yet' : '')) + '</div></div>' +
+    '<div><div class="hold-val">' + fmtMoney(it.value) + '</div><div class="hold-pl">' + plHtml(it.value - it.cost, it.cost) + '</div></div></div>';
+}
+
 function renderHoldings() {
   var el = document.getElementById('holdings-section');
   if (!el || !loaded) return;
   var html = '';
-  [['investment','📊 Investments'], ['asset','🏠 Assets']].forEach(function(g) {
-    var list = holdings.filter(function(h){ return h.group === g[0] && (h.quantity > 0 || !h.txns.length); });
-    if (!list.length) return;
-    var val = list.reduce(function(a, h){ return a + h.value; }, 0), cost = list.reduce(function(a, h){ return a + h.cost; }, 0);
-    html += '<div class="acc-page-section-header">' + g[1] + '</div>';
-    html += '<div class="hold-total"><span>Value <b>' + fmtMoney(val) + '</b></span>' + (g[0] === 'investment' ? '<span>' + plHtml(val - cost, cost) + '</span>' : '') + '</div>';
-    list.sort(function(a, b){ return b.value - a.value; }).forEach(function(h) {
-      var k = kindInfo(h.kind);
-      var sub = g[0] === 'investment'
-        ? fmtQty(h.quantity) + (h.unit ? ' ' + recEsc(h.unit) : '') + (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '') +
-          (unitPriceHtml(h) ? ' · ' + unitPriceHtml(h) : '')
-        : k[2] + (h.priceDate ? ' · valued ' + fmtDate(h.priceDate) : '');
-      html += '<div class="hold-card" onclick="openHolding(\'' + escQ(h.id) + '\')">' +
-        '<div class="hold-icon">' + k[1] + '</div>' +
-        '<div style="min-width:0"><div class="hold-name">' + recEsc(h.name) + (h.symbol ? ' <span class="hold-sub">' + recEsc(h.symbol) + '</span>' : '') + '</div>' +
-        '<div class="hold-sub">' + sub + (h.autoPrice ? ' · <span class="live-badge">live</span>' : (!h.priced && g[0] === 'investment' ? ' · no price yet' : '')) + '</div></div>' +
-        '<div><div class="hold-val">' + fmtMoney(h.value) + '</div><div class="hold-pl">' + plHtml(h.unrealized, h.cost) + '</div></div></div>';
+  var groups = holdingGroups(holdings, holdGroupMode, brokerData);
+  if (groups.length) {
+    html += '<div class="hold-head"><div class="acc-page-section-header">📊 Holdings</div>' +
+      '<div class="type-tabs hold-mode" role="group" aria-label="Group by">' +
+      ['type', 'broker'].map(function(m) {
+        var on = holdGroupMode === m;
+        return '<button class="type-tab' + (on ? ' active' : '') + '" aria-pressed="' + on + '" onclick="setHoldGroupMode(\'' + m + '\')">' + (m === 'type' ? 'Type' : 'Broker') + '</button>';
+      }).join('') + '</div></div>';
+    groups.forEach(function(g, i) {
+      var shut = !!holdCollapsed[g.key], kind = g.key.indexOf('type:') === 0 ? g.key.slice(5) : '';
+      var icon = kind ? kindInfo(kind)[1] : (g.key === 'broker:' ? '📦' : '🏦');
+      html += '<div class="hold-group' + (shut ? ' shut' : '') + '" data-key="' + escAttr(g.key) + '">' +
+        '<button type="button" class="hold-group-head" aria-expanded="' + !shut + '" onclick="toggleHoldGroup(' + i + ')">' +
+          '<span class="hold-group-name"><span class="hold-group-chev" aria-hidden="true">▾</span>' + icon + ' ' + recEsc(g.label) +
+            ' <span class="hold-group-count">' + g.count + '</span></span>' +
+          '<span class="hold-group-sum"><b>' + fmtMoney(g.value) + '</b> ' + plHtml(g.unrealized, g.cost) + '</span>' +
+        '</button><div class="hold-group-body">' + g.items.map(holdCardHtml).join('') + '</div></div>';
     });
-  });
+  }
   var closed = holdings.filter(function(h){ return h.quantity <= 0 && h.txns.length; });
   if (closed.length) {
     var rz = closed.reduce(function(a, h){ return a + h.realized + h.dividends; }, 0), inv = closed.reduce(function(a, h){ return a + h.invested; }, 0);

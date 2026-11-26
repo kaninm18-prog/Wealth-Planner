@@ -40,7 +40,7 @@ Data flow: app → `api(payload)` in `js/core.js` → POST to the Apps Script UR
   Keep the front end working on older phones (no syntax newer than what's already used).
 - PIN lock: never write the token or anything read from the sheet to `localStorage` in plain text (encrypt it with `lockKey`
   like `lockSaveRates`, or keep it in memory only). Every new variable or part of the page that holds such data must be
-  emptied in `clearAppData()` (`js/core.js`), which runs on lock. Browser check: `node tests/browser/lock.check.js` (needs Playwright).
+  emptied in `clearAppData()` (`js/core.js`), which runs on lock. Browser checks: `node tests/browser/lock.check.js` and `node tests/browser/screens.check.js` (need Playwright).
 - Helpers in `src/01_helpers.gs` match Money Tracker's, so code can be ported unchanged.
 - New back-end action: add a `case` in `route()` + the function in the right feature file + a test.
 - New tab: add it to `SHEET` and its headers to `HEADERS` in `src/00_config.gs`; if it has an `Id` column, set `ID_COL`.
