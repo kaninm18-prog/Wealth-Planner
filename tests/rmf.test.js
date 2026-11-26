@@ -63,7 +63,7 @@ test('the 5 years count from the fund\'s first buy, not from each buy', () => {
 
 test('already 55 and held 5 years: nothing to lock (no error, no LockUntil)', () => {
   const { buy, buyMore, holding, stored } = setup('1960-01-01');
-  const first = buy('KFRMF', '2019-01-01');                              // 5 years: 2024-01-01 → nothing locks on 2019? 55 passed, 5y after
+  const first = buy('KFRMF', '2019-01-01');                              // 55 since 2015, so 5 years decide
   assert.equal(first.lockUntil, '2024-01-01', 'a 2019 buy is locked until 2024');
   const later = buyMore(first.holdingId, '2026-11-25');
   assert.ok(later.ok, later.error);
@@ -88,12 +88,11 @@ test('the rule only applies to buys; an explicit date without the rule is kept a
   assert.equal(typed.lockUntil, '2030-01-01');
 });
 
-test('selling locked RMF units takes the oldest first; a switch keeps their lock dates', () => {
+test('the buy shows as a locked lot; changing the birth date later never rewrites it', () => {
   const { b, buy, holding } = setup('1990-06-15');
-  const first = buy('KFRMF', '2026-11-25');
+  assert.ok(buy('KFRMF', '2026-11-25').ok);
   const h = holding('KFRMF');
   assert.equal(h.lots.length, 1); assert.equal(h.lots[0].lockUntil, '2045-06-15'); assert.equal(h.lots[0].locked, true);
-  assert.equal(first.ok, true);
   assert.equal(b.api({ action: 'setBirthDate', birthDate: '1990-06-16' }).ok, true);
   assert.equal(holding('KFRMF').lots[0].lockUntil, '2045-06-15', 'changing the birth date later never rewrites saved buys');
 });
