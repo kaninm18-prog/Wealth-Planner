@@ -41,7 +41,12 @@ function H(id, name, kind, qty, price, avg, txns, extra) {
 const T = (id, type, date, quantity, price, account) => ({ id, type, date, quantity, price, amount: quantity * price, account, fee: 0, note: '' });
 const holdings = [
   H('H1', 'PTT', 'stock', 100, 35, 30, [T('X1', 'buy', '2026-01-05', 100, 30, 'Kasikorn Securities')], { symbol: 'PTT.BK', unit: 'shares' }),
-  H('H2', 'KFSSF', 'fund', 1000, 12, 11, [T('X3', 'buy', '2026-03-01', 400, 11, 'Finnomena'), T('X2', 'buy', '2026-01-10', 600, 11, 'Kasikorn Securities')]),
+  // a tax fund: the 2016 lot is free since 2026-02-01, the 2026 lot is locked until 2036 (sales come from the oldest units first)
+  H('H2', 'KFSSF', 'fund', 1000, 12, 11, [Object.assign(T('X3', 'buy', '2026-01-10', 600, 11, 'Kasikorn Securities'), { lockUntil: '2036-01-10' }),
+    Object.assign(T('X2', 'buy', '2016-02-01', 400, 11, 'Finnomena'), { lockUntil: '2026-02-01' })],
+    { lockedQty: 600, freeQty: 400, nextUnlock: { date: '2036-01-10', quantity: 600 },
+      lots: [{ id: 'X2', date: '2016-02-01', quantity: 400, lockUntil: '2026-02-01', locked: false },
+             { id: 'X3', date: '2026-01-10', quantity: 600, lockUntil: '2036-01-10', locked: true }] }),
   H('H3', 'Gold bar', 'gold', 1, 42000, 40000, [T('X4', 'buy', '2026-02-01', 1, 40000, '')], { unit: 'baht-weight' }),
   H('H4', 'Honda Jazz', 'vehicle', 1, 450000, 500000, [T('X5', 'buy', '2025-06-01', 1, 500000, '')]),
   H('H5', 'Sold out', 'stock', 0, 40, 0, [T('X7', 'sell', '2026-05-01', 10, 40, 'Kasikorn Securities'), T('X6', 'buy', '2026-01-02', 10, 30, 'Kasikorn Securities')],
@@ -126,9 +131,73 @@ const bootstrap = {
       await fits(page);
       await shot(page, 'group-broker-' + theme, true);
     });
+    await check(theme + ': holding detail shows locked and free units and each lot', async () => {
+      await page.evaluate(() => openHolding('H2'));
+      const box = await page.locator('#hd-body .lock-box').textContent();
+      assert.match(box, /Locked: 600 units until 10 Jan 2036, free: 400 units\./);
+      assert.match(box, /Bought 1 Feb 2016 · 400 left.*free since 1 Feb 2026/);
+      assert.match(box, /Bought 10 Jan 2026 · 600 left.*until 10 Jan 2036/);
+      assert.match(await page.locator('#hd-history').textContent(), /🔒 until 10 Jan 2036/);
+      await fits(page);
+      await page.waitForTimeout(450);
+      await shot(page, 'lock-detail-' + theme);
+    });
+    await check(theme + ': sell more than the free units → a clear warning, but the sale can still be saved', async () => {
+      await page.evaluate(() => openTrade('sell', 'H2'));
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'no "Locked until" on a sale');
+      await page.fill('#tr-qty', '400');
+      assert.equal(await page.locator('#tr-lock-warn').isVisible(), false, 'the 400 free (oldest) units: no warning');
+      assert.match(await page.locator('#tr-hint').textContent(), /Locked: 600, free to sell: 400/);
+      await page.fill('#tr-qty', '500');
+      assert.equal(await page.locator('#tr-lock-warn').textContent(),
+        '⚠ Selling 100 locked units: you may lose the tax benefit and have to pay it back. The next 600 unlock on 10 Jan 2036.');
+      await page.fill('#tr-price', '12');
+      await fits(page);
+      await page.locator('#tr-lock-warn').scrollIntoViewIfNeeded(); await page.waitForTimeout(450);
+      await shot(page, 'lock-sell-warn-' + theme);
+      const n = page.calls.length;
+      await page.click('#tr-save');
+      await page.waitForFunction(() => !document.querySelector('#trade-modal.open'));
+      const sent = page.calls.slice(n).find(c => c.action === 'addHoldingTxn');
+      assert.equal(sent.type, 'sell'); assert.equal(sent.quantity, 500, 'not blocked');
+      await page.evaluate(() => closeModal('holding-modal'));
+    });
+    await check(theme + ': buy form: "Locked until" with +10 / +8 / +5 years from the purchase date, or any date', async () => {
+      await page.evaluate(() => openTrade('buy', 'H2'));
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), true);
+      await page.fill('#tr-date', '2026-11-25'); await page.locator('#tr-date').dispatchEvent('change');
+      await page.click('#tr-lock-quick >> text=+10 years');
+      assert.equal(await page.inputValue('#tr-lock'), '2036-11-25');
+      await page.fill('#tr-date', '2024-02-29'); await page.locator('#tr-date').dispatchEvent('change');
+      assert.equal(await page.inputValue('#tr-lock'), '2034-02-28', 'follows the date; 29 Feb → 28 Feb');
+      await page.click('#tr-lock-quick >> text=+5 years');
+      assert.equal(await page.inputValue('#tr-lock'), '2029-02-28');
+      await page.click('#tr-lock-quick >> text=+8 years');
+      assert.equal(await page.locator('#tr-lock-quick .btn.active').textContent(), '+8 years');
+      await page.fill('#tr-lock', '2031-12-31');
+      assert.equal(await page.locator('#tr-lock-quick .btn.active').count(), 0, 'a typed date: no quick button lit');
+      await page.fill('#tr-qty', '10'); await page.fill('#tr-price', '12');
+      await fits(page);
+      await shot(page, 'lock-buy-' + theme);
+      const n = page.calls.length;
+      await page.click('#tr-save');
+      await page.locator('#trade-modal.open').waitFor({ state: 'detached' }).catch(() => {});
+      await page.waitForFunction(() => !document.querySelector('#trade-modal.open'));
+      const sent = page.calls.slice(n).find(c => c.action === 'addHoldingTxn');
+      assert.equal(sent.lockUntil, '2031-12-31'); assert.equal(sent.date, '2024-02-29');
+      await page.evaluate(() => { closeModal('holding-modal'); openTrade('buy', 'H4'); });
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'not for a car');
+      await page.evaluate(() => { openTrade('sell', 'H2'); });
+      await page.fill('#tr-qty', '900');
+      assert.equal(await page.locator('#tr-lock-warn').isVisible(), true);
+      await page.evaluate(() => closeModal('trade-modal'));
+    });
     await check(theme + ': lock forgets the folded groups; the Type | Broker choice stays', async () => {
+      await page.evaluate(() => openTrade('sell', 'H2'));
+      await page.fill('#tr-qty', '900');
       await page.evaluate(() => lockNow());
       assert.deepEqual(await page.evaluate(() => holdCollapsed), {});
+      assert.equal(await page.locator('#tr-lock-warn').textContent(), '', 'the sell warning is emptied');
       assert.equal(await page.locator('#holdings-section').textContent().then(t => /Finnomena|KFSSF/.test(t)), false);
       for (const k of PIN) await page.keyboard.press(k);
       await page.locator('#holdings-section .hold-group').first().waitFor();
