@@ -434,7 +434,8 @@ function tradeFormUpdate() {
   document.getElementById('tr-rate-group').style.display = cur === 'THB' ? 'none' : '';
   document.getElementById('tr-rate-label').textContent = '1 ' + cur + ' = ฿';
   document.getElementById('tr-qp').style.display = (div || asset) ? 'none' : 'flex';
-  document.getElementById('tr-lock-group').style.display = tradeType === 'buy' && !asset ? '' : 'none';
+  // "Locked until" is for tax funds (SSF, ThaiESG): only shown for mutual funds (the backend accepts it on any buy)
+  document.getElementById('tr-lock-group').style.display = tradeType === 'buy' && kind === 'fund' ? '' : 'none';
   document.getElementById('tr-fee-label').textContent = (div ? 'Tax withheld (' : 'Fee (') + cs + ')';
   document.getElementById('tr-fee').placeholder = div ? 'e.g. 10% for Thai stocks' : '0';
   document.getElementById('tr-amount-label').textContent = (div ? 'Dividend received' : asset ? (tradeType === 'sell' ? 'Sold for' : 'Price paid') : 'Total') + ' (' + cs + ')';
@@ -486,7 +487,7 @@ function saveTrade() {
     note: document.getElementById('tr-note').value.trim(), id: newClientId(div ? 'WD' : 'X') };   // WD: exported to Money Tracker (C8)
   if (!h) payload.holding = { name: document.getElementById('tr-name').value.trim(), kind: kind,
     symbol: document.getElementById('tr-symbol').value, unit: asset ? '' : (document.getElementById('tr-unit').value.trim() || kindInfo(kind)[4]) };
-  var lock = tradeType === 'buy' && !asset ? document.getElementById('tr-lock').value : '';
+  var lock = tradeType === 'buy' && kind === 'fund' ? document.getElementById('tr-lock').value : '';
   if (lock && lock <= payload.date) { toast('"Locked until" should be after the purchase date'); return; }
   if (lock) payload.lockUntil = lock;
   if (!payload.account && (div || payload.fee)) { toast(div ? 'Enter the broker that paid it' : 'Enter the broker the fee was paid at'); return; }

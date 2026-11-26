@@ -2,6 +2,10 @@
 
 One line per change the user would notice. Newest first.
 
+## 2026-11-26
+- Mutual funds are now priced from Google Finance, then the Thai SEC — never from Yahoo, so a Thai fund code can't pick up a foreign share's price.
+- "Locked until" on the buy form now only shows for mutual funds.
+
 ## 2026-11-25
 - Thai mutual funds now get their price automatically: the daily NAV from the Thai SEC (the latest of the last 7 days, so weekends and holidays are covered), when Google Finance and Yahoo have none. Give the fund its short name as the symbol (e.g. KFSSF, or SEC:K-USA-A(A) for one class). Needs a free SEC API key in the backend; until then the reason is shown.
 - Switch a fund into another (e.g. SSF → SSF, ThaiESG → ThaiESG) in one step: Holding → Switch. The original cost is carried over, so no profit or loss is booked and the broker's cash doesn't change (except a fee). Locked units keep their lock dates in the new fund, oldest units first. The history shows "Switched to / from" and what the switch was worth; deleting it removes both sides.
