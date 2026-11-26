@@ -6,7 +6,7 @@
 //  • Holdings with a Symbol get today's price: "PTT.BK" or "BKK:PTT" (Thai stocks), "NASDAQ:AAPL",
 //    "CURRENCY:BTCTHB"… Prices in other currencies are converted to baht at today's rate.
 //  • Gold (kind gold, unit oz / baht-weight / gram, or symbol XAUUSD, GOLD:BAHT, GOLD:GRAM) follows spot gold.
-// Thai mutual funds are not in GOOGLEFINANCE — update those by hand.
+// Thai mutual funds are not in GOOGLEFINANCE or Yahoo: they come from the Thai SEC's daily NAV (src/16_sec_nav.gs).
 // Gold has no stock symbol: it is priced from spot gold (XAU/USD, per troy ounce).
 // Thai 96.5% gold: 1 baht-weight = 15.244 g × 96.5% = 0.47295 oz of pure gold (an estimate — shops add a spread).
 var GOLD_UNITS = { OZ: 1, BAHT: 0.47295, GRAM: 1 / 31.1035 };
@@ -27,7 +27,10 @@ function priceSource(h) {
   var g = goldUnit(h.symbol, h.unit, h.kind);
   if (g) return { q: "CURRENCY:XAUUSD", factor: GOLD_UNITS[g], cur: "USD" };
   var q = quoteSymbol(h.symbol);
-  if (!q) return null;
+  if (!q) {                                       // a fund abbreviation Google can't take ("K-USA-A(A)"): SEC only
+    var f = secSymbol(h);
+    return f ? { q: "SEC:" + f, factor: 1, cur: "THB" } : null;
+  }
   var m = q.match(/^CURRENCY:[A-Z]{3}([A-Z]{3})$/);
   return { q: q, factor: 1, cur: m ? m[1] : "" };
 }
@@ -128,6 +131,18 @@ function refreshPrices() {
       result.sources[h.name] = "Yahoo Finance (" + ySym[i] + ")";
     } else why[i] = ySym[i] ? (q && q.error) || "no price" : "no price from Google Finance, and no other source for this symbol";
   });
+  // 1c) Thai mutual funds that neither could price: the Thai SEC's NAV (THB, the latest of the last 7 days)
+  var navDate = {};
+  var sSym = data.map(function(h, i){ return why[i] !== undefined ? secSymbol(h) : ""; });
+  var sq = secNavQuotes(sSym.filter(function(s, i){ return s && sSym.indexOf(s) === i; }));
+  data.forEach(function(h, i) {
+    if (!sSym[i]) return;
+    var q = sq[sSym[i]];
+    if (q && q.price) {
+      px[i][1] = q.price; px[i][2] = "THB"; navDate[i] = q.date; delete why[i];
+      result.sources[h.name] = "Thai SEC (" + sSym[i] + ", NAV of " + q.date + ")";
+    } else why[i] = "no price from Google Finance or Yahoo; " + ((q && q.error) || "no price from the SEC");
+  });
   // 2) exchange rates for every non-THB quote currency and broker currency
   var curs = {}, brokers = brokerRows();
   px.forEach(function(r){ var c = String(r[2] || "").toUpperCase(); if (c && c !== "THB") curs[c] = true; });
@@ -166,7 +181,7 @@ function refreshPrices() {
     var row = resolveRow(SHEET.HOLDINGS, { id: h.id });
     if (!row) return;
     hs.getRange(row, 7).setNumberFormat("@");
-    hs.getRange(row, 6, 1, 2).setValues([[Math.round(thb * 10000) / 10000, today]]);
+    hs.getRange(row, 6, 1, 2).setValues([[Math.round(thb * 10000) / 10000, navDate[i] || today]]);   // a NAV is for its own date
     ensureHeaders(hs, 10, ["QuoteCurrency", "NextXD", "NextDividend"]);
     hs.getRange(row, 10).setValue(cur);
     result.updated.push(h.name);
@@ -185,13 +200,19 @@ function testPriceSources() {
     return ['="' + q + '"', '=IFERROR(GOOGLEFINANCE("' + q + '","price"),"")', '=""'];
   }));
   var ys = hs.map(yahooSymbol), yq = yahooQuotes(ys.filter(function(s, i){ return s && ys.indexOf(s) === i; }));
+  // Funds are also asked from the SEC (even if Google or Yahoo answered), with the raw answers, so a live run shows
+  // exactly what the SEC sends back. The key itself is never shown.
+  var ss = hs.map(secSymbol), raw = [], sq = secNavQuotes(ss.filter(function(s, i){ return s && ss.indexOf(s) === i; }), raw);
   var lines = hs.map(function(h, i) {
-    var q = ys[i] ? yq[ys[i]] : null;
+    var q = ys[i] ? yq[ys[i]] : null, s = ss[i] ? sq[ss[i]] : null;
     return h.name + " — Google Finance: " + (goodNumber(g[i][1]) ? g[i][1] : "none") +
-      " · Yahoo " + (ys[i] || "(no symbol)") + ": " + (q ? (q.price ? q.price + " " + q.cur : q.error) : "not asked");
+      " · Yahoo " + (ys[i] || "(no symbol)") + ": " + (q ? (q.price ? q.price + " " + q.cur : q.error) : "not asked") +
+      (ss[i] ? " · SEC " + ss[i] + ": " + (s && s.price ? s.price + " THB (NAV of " + s.date + ")" : (s && s.error) || "no answer") : "");
   });
   var usd = yahooQuotes(["USDTHB=X"])["USDTHB=X"];
   lines.push("USD → THB on Yahoo: " + (usd && usd.price ? usd.price : (usd && usd.error)));
+  lines.push("SEC_API_KEY: " + (PropertiesService.getScriptProperties().getProperty("SEC_API_KEY") ? "set" : "not set"));
+  raw.forEach(function(r){ lines.push("SEC raw — " + r); });
   Logger.log(lines.join("\n") || "No holdings with automatic prices.");
   return lines;
 }

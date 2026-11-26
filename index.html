@@ -134,9 +134,9 @@
       <div class="form-group"><label class="form-label">Name</label><input type="text" class="form-control" id="tr-name" placeholder="e.g. Gold bar 96.5%, PTT, K-USA fund, Honda Jazz"></div>
       <div style="display:flex;gap:10px">
         <div class="form-group" style="flex:1"><label class="form-label">Type</label><select class="form-control" id="tr-kind" onchange="tradeFormUpdate()"></select></div>
-        <div class="form-group" style="flex:1"><label class="form-label">Symbol (optional)</label><input type="text" class="form-control" id="tr-symbol" placeholder="PTT.BK, NASDAQ:AAPL"></div>
+        <div class="form-group" style="flex:1"><label class="form-label">Symbol (optional)</label><input type="text" class="form-control" id="tr-symbol" placeholder="PTT.BK, NASDAQ:AAPL, KFSSF"></div>
       </div>
-      <div class="fx-hint" style="display:block;margin:-6px 0 10px">With a symbol, the price updates automatically every day (Thai stocks: add .BK). Gold in oz, baht-weight or grams follows the world gold price automatically (an estimate). Thai mutual funds aren't available — update those by hand.</div>
+      <div class="fx-hint" style="display:block;margin:-6px 0 10px">With a symbol, the price updates automatically every day (Thai stocks: add .BK). Gold in oz, baht-weight or grams follows the world gold price automatically (an estimate). Thai mutual funds (type Mutual fund): use the fund's short name, e.g. KFSSF, or SEC:K-USA-A(A) for one class — the daily NAV comes from the Thai SEC.</div>
       <div class="form-group" id="tr-unit-group"><label class="form-label">Unit (optional)</label><input type="text" class="form-control" id="tr-unit" placeholder="shares, baht-weight, units"></div>
     </div>
     <div class="form-group"><label class="form-label" id="tr-acct-label">Broker</label>
