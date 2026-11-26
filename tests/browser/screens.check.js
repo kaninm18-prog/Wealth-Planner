@@ -43,10 +43,13 @@ const holdings = [
   H('H1', 'PTT', 'stock', 100, 35, 30, [T('X1', 'buy', '2026-01-05', 100, 30, 'Kasikorn Securities')], { symbol: 'PTT.BK', unit: 'shares' }),
   // a tax fund: the 2016 lot is free since 2026-02-01, the 2026 lot is locked until 2036 (sales come from the oldest units first)
   H('H2', 'KFSSF', 'fund', 1000, 12, 11, [Object.assign(T('X3', 'buy', '2026-01-10', 600, 11, 'Kasikorn Securities'), { lockUntil: '2036-01-10' }),
-    Object.assign(T('X2', 'buy', '2016-02-01', 400, 11, 'Finnomena'), { lockUntil: '2026-02-01' })],
+    Object.assign(T('X2', 'buy', '2016-02-01', 400, 11, 'Finnomena'), { lockUntil: '2026-02-01' }),
+    Object.assign(T('X8', 'sell', '2015-12-01', 50, 10, 'Kasikorn Securities'), { switchId: 'SW1', switchValue: 600 })],
     { lockedQty: 600, freeQty: 400, nextUnlock: { date: '2036-01-10', quantity: 600 },
       lots: [{ id: 'X2', date: '2016-02-01', quantity: 400, lockUntil: '2026-02-01', locked: false },
              { id: 'X3', date: '2026-01-10', quantity: 600, lockUntil: '2036-01-10', locked: true }] }),
+  // switched in from KFSSF (cost carried over): SwitchId links both sides
+  H('H6', 'SCBSSF', 'fund', 50, 12, 10, [Object.assign(T('X9', 'buy', '2015-12-01', 50, 10, 'Kasikorn Securities'), { switchId: 'SW1', switchValue: 600, lockUntil: '2030-06-15' })]),
   H('H3', 'Gold bar', 'gold', 1, 42000, 40000, [T('X4', 'buy', '2026-02-01', 1, 40000, '')], { unit: 'baht-weight' }),
   H('H4', 'Honda Jazz', 'vehicle', 1, 450000, 500000, [T('X5', 'buy', '2025-06-01', 1, 500000, '')]),
   H('H5', 'Sold out', 'stock', 0, 40, 0, [T('X7', 'sell', '2026-05-01', 10, 40, 'Kasikorn Securities'), T('X6', 'buy', '2026-01-02', 10, 30, 'Kasikorn Securities')],
@@ -64,7 +67,8 @@ const bootstrap = {
       { name: 'Finnomena', currency: 'THB', rate: 1, saved: true, dividendsTo: '', cash: 0, cashThb: 0, holdings: 4800, value: 4800, valueThb: 4800,
         positions: [{ id: 'H2', name: 'KFSSF', kind: 'fund', quantity: 400, valueThb: 4800 }], warnings: [] },
       { name: 'Kasikorn Securities', currency: 'THB', rate: 1, saved: true, dividendsTo: '', cash: 1000, cashThb: 1000, holdings: 10700, value: 11700, valueThb: 11700,
-        positions: [{ id: 'H1', name: 'PTT', kind: 'stock', quantity: 100, valueThb: 3500 }, { id: 'H2', name: 'KFSSF', kind: 'fund', quantity: 600, valueThb: 7200 }], warnings: [] },
+        positions: [{ id: 'H1', name: 'PTT', kind: 'stock', quantity: 100, valueThb: 3500 }, { id: 'H2', name: 'KFSSF', kind: 'fund', quantity: 600, valueThb: 7200 },
+          { id: 'H6', name: 'SCBSSF', kind: 'fund', quantity: 50, valueThb: 600 }], warnings: [] },
     ] },
 };
 
@@ -104,7 +108,7 @@ const bootstrap = {
   for (const theme of ['light', 'dark']) {
     const { ctx, page } = await open(theme);
     await check(theme + ': grouped by type, in the agreed order, with value, P/L and count', async () => {
-      assert.deepEqual((await groups(page)).map(t => t.replace(/^▾/, '').trim()), ['📈 Stocks 1', '🏦 Mutual funds 1', '🥇 Gold 1', '🚗 Vehicles 1']);
+      assert.deepEqual((await groups(page)).map(t => t.replace(/^▾/, '').trim()), ['📈 Stocks 1', '🏦 Mutual funds 2', '🥇 Gold 1', '🚗 Vehicles 1']);
       const head = await page.locator('.hold-group-head').first().textContent();
       assert.match(head, /฿3,500/); assert.match(head, /\+฿500 \(\+16\.7%\)/);
       assert.equal(await page.locator('.hold-mode .type-tab.active').textContent(), 'Type');
@@ -120,10 +124,10 @@ const bootstrap = {
       assert.equal(await page.locator('.hold-group-head').first().getAttribute('aria-expanded'), 'false');
       await page.locator('.hold-mode .type-tab', { hasText: 'Broker' }).click();
       assert.deepEqual((await groups(page)).map(t => t.replace(/^▾/, '').trim()),
-        ['🏦 Kasikorn Securities 2', '🏦 Finnomena 1', '📦 Other assets 2']);
+        ['🏦 Kasikorn Securities 3', '🏦 Finnomena 1', '📦 Other assets 2']);
       const ks = page.locator('.hold-group').first();
       assert.match(await ks.textContent(), /600 units of 1,000/, 'a split holding shows that broker\'s part');
-      assert.match(await ks.locator('.hold-group-head').textContent(), /฿10,700/);
+      assert.match(await ks.locator('.hold-group-head').textContent(), /฿11,300/);
       await page.locator('.hold-group-head', { hasText: 'Finnomena' }).click();
       const store = await page.evaluate(() => JSON.stringify(localStorage));
       assert.equal(await page.evaluate(() => localStorage.getItem('wealthHoldGroup')), 'broker');
@@ -201,12 +205,54 @@ const bootstrap = {
       await shot(page, 'sec-hint-' + theme);
       await page.evaluate(() => closeModal('trade-modal'));
     });
+    await check(theme + ': switch a fund: cost carried, lock dates carried oldest first, one action', async () => {
+      await page.evaluate(() => openHolding('H2'));
+      await page.locator('#hd-actions button', { hasText: 'Switch' }).click();
+      assert.equal(await page.locator('#switch-modal').evaluate(e => e.classList.contains('open')), true);
+      assert.equal(await page.inputValue('#sw-from'), 'H2');
+      assert.equal(await page.locator('#sw-new').isVisible(), true, 'into a new fund by default');
+      assert.equal(await page.inputValue('#sw-account'), 'Kasikorn Securities');
+      await page.fill('#sw-out', '500'); await page.fill('#sw-in', '1000');
+      const pv = await page.locator('#sw-preview').textContent();
+      assert.match(pv, /Cost carried over: ฿5,500 \(avg ฿11 × 500\)\. No profit or loss is booked/);
+      assert.match(pv, /400 units → 800 new\s*free/);
+      assert.match(pv, /100 units → 200 new\s*🔒 until 10 Jan 2036/);
+      await page.selectOption('#sw-to', 'H6');
+      assert.equal(await page.locator('#sw-new').isVisible(), false);
+      assert.equal(await page.locator('#sw-to option[value="H2"]').count(), 0, 'not into itself');
+      await page.fill('#sw-value', '6100'); await page.fill('#sw-fee', '10');
+      assert.match(await page.locator('#sw-preview').textContent(), /doesn't change except the fee/);
+      await page.waitForTimeout(450);
+      await fits(page);
+      await page.locator('#sw-preview').scrollIntoViewIfNeeded();
+      await shot(page, 'switch-form-' + theme);
+      const n = page.calls.length;
+      await page.click('#sw-save');
+      await page.waitForFunction(() => !document.querySelector('#switch-modal.open'));
+      const sent = page.calls.slice(n).find(c => c.action === 'addSwitch');
+      assert.equal(sent.fromId, 'H2'); assert.equal(sent.toId, 'H6');
+      assert.equal(sent.unitsOut, 500); assert.equal(sent.unitsIn, 1000); assert.equal(sent.value, 6100); assert.equal(sent.fee, 10);
+      assert.equal(sent.account, 'Kasikorn Securities'); assert.match(sent.id, /^SW/);
+    });
+    await check(theme + ': history: "Switched to" / "Switched from" with what it was worth', async () => {
+      await page.evaluate(() => openHolding('H6'));
+      assert.match(await page.locator('#hd-history').textContent(), /Switched from KFSSF · 50 units · worth ฿600 · 🔒 until 15 Jun 2030/);
+      await page.evaluate(() => openHolding('H2'));
+      assert.match(await page.locator('#hd-history').textContent(), /Switched to SCBSSF · 50 units · worth ฿600/);
+      let text = '';
+      page.once('dialog', d => { text = d.message(); d.dismiss(); });
+      await page.locator('#hd-history .hd-txn', { hasText: 'Switched to' }).locator('button').click();
+      assert.match(text, /Delete this switch\? Both funds' entries are removed\./);
+      await page.evaluate(() => closeModal('holding-modal'));
+    });
     await check(theme + ': lock forgets the folded groups; the Type | Broker choice stays', async () => {
       await page.evaluate(() => openTrade('sell', 'H2'));
       await page.fill('#tr-qty', '900');
       await page.evaluate(() => lockNow());
       assert.deepEqual(await page.evaluate(() => holdCollapsed), {});
       assert.equal(await page.locator('#tr-lock-warn').textContent(), '', 'the sell warning is emptied');
+      assert.equal(await page.locator('#sw-preview').textContent(), '', 'the switch preview is emptied');
+      assert.equal(await page.locator('#sw-from option').count(), 0);
       assert.equal(await page.locator('#holdings-section').textContent().then(t => /Finnomena|KFSSF/.test(t)), false);
       for (const k of PIN) await page.keyboard.press(k);
       await page.locator('#holdings-section .hold-group').first().waitFor();

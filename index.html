@@ -180,6 +180,47 @@
   </div>
 </div>
 
+<!-- ══ Fund switch Modal (js/holdings.js) ══ -->
+<div class="modal-overlay" id="switch-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Switch fund</div>
+    <div class="form-group"><label class="form-label" for="sw-from">From</label>
+      <select class="form-control" id="sw-from" onchange="switchFormUpdate()"></select></div>
+    <div class="form-group"><label class="form-label" for="sw-to">Into</label>
+      <select class="form-control" id="sw-to" onchange="switchFormUpdate()"></select></div>
+    <div id="sw-new" class="form-sub" style="display:none">
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:1.3"><label class="form-label" for="sw-name">New fund name</label><input type="text" class="form-control" id="sw-name" placeholder="e.g. SCB SSF"></div>
+        <div class="form-group" style="flex:1"><label class="form-label" for="sw-symbol">Symbol (optional)</label><input type="text" class="form-control" id="sw-symbol" placeholder="SCBSSF"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-out">Units out</label>
+        <input type="number" class="form-control" id="sw-out" inputmode="decimal" step="any" oninput="switchFormUpdate()"></div>
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-in">Units received</label>
+        <input type="number" class="form-control" id="sw-in" inputmode="decimal" step="any" oninput="switchFormUpdate()"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-value">Worth (฿, optional)</label>
+        <input type="number" class="form-control" id="sw-value" inputmode="decimal" step="any" placeholder="from the fund house"></div>
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-fee">Fee (฿)</label>
+        <input type="number" class="form-control" id="sw-fee" inputmode="decimal" step="any" placeholder="0" oninput="switchFormUpdate()"></div>
+    </div>
+    <div class="form-group"><label class="form-label" for="sw-account">Broker</label>
+      <input type="text" class="form-control" id="sw-account" list="broker-list" autocomplete="off"></div>
+    <div style="display:flex;gap:10px">
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-date">Date</label><input type="date" class="form-control" id="sw-date" onchange="switchFormUpdate()"></div>
+      <div class="form-group" style="flex:1"><label class="form-label" for="sw-note">Note</label><input type="text" class="form-control" id="sw-note"></div>
+    </div>
+    <div class="lock-box" id="sw-preview"></div>
+    <div style="height:12px"></div>
+    <button class="btn btn-primary" id="sw-save" onclick="saveSwitch()">Save switch</button>
+    <div style="height:8px"></div>
+    <button class="btn btn-ghost" onclick="closeModal('switch-modal')">Cancel</button>
+  </div>
+</div>
+
 <!-- ══ Broker Modal ══ -->
 <div class="modal-overlay" id="broker-modal">
   <div class="modal">

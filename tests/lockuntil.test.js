@@ -17,12 +17,12 @@ function setup(now) {
 }
 const plain = x => JSON.parse(JSON.stringify(x));
 
-test('LockUntil is the last HoldingTxns column, after TaxOrig; stored as text on buys only', () => {
+test('LockUntil is the column after TaxOrig; stored as text on buys only', () => {
   const { b, buyNew, txn } = setup();
   const r = buyNew('KFSSF', 100, '2024-03-01', '2034-03-01');
   assert.ok(r.ok, r.error);
   const head = b.sheets.HoldingTxns.rows[0];
-  assert.equal(head[14], 'TaxOrig'); assert.equal(head[15], 'LockUntil'); assert.equal(head.length, 16);
+  assert.equal(head[14], 'TaxOrig'); assert.equal(head[15], 'LockUntil');
   assert.equal(b.sheets.HoldingTxns.rows[1][15], '2034-03-01');
   const s = txn('sell', r.holdingId, 1, '2026-01-01', { lockUntil: '2040-01-01' });
   assert.ok(s.ok);
@@ -85,7 +85,7 @@ test('an old row without the LockUntil column (and a holding with no lock) reads
   // the first locked buy adds the missing headers, without touching the old ones
   const r = b.api({ action: 'addHoldingTxn', type: 'buy', holdingId: 'H1', quantity: 2, price: 10, account: 'KS', date: '2026-02-01', lockUntil: '2036-02-01' });
   assert.ok(r.ok, r.error);
-  assert.deepEqual([...b.sheets.HoldingTxns.rows[0]].slice(11), ['OrigAmount', 'Currency', 'FeeOrig', 'TaxOrig', 'LockUntil']);
+  assert.deepEqual([...b.sheets.HoldingTxns.rows[0]].slice(11, 16), ['OrigAmount', 'Currency', 'FeeOrig', 'TaxOrig', 'LockUntil']);
   assert.equal(holding('Old fund').lockedQty, 2);
 });
 
