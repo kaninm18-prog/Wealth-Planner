@@ -36,7 +36,8 @@ function H(id, name, kind, qty, price, avg, txns, extra) {
   return Object.assign({ id, name, kind, group: inv ? 'investment' : 'asset', symbol: '', unit: inv ? 'units' : '', note: '', quantity: qty,
     value: qty * price, cost: qty * avg, unrealized: qty * (price - avg), realized: 0, dividends: 0, fees: 0, taxWithheld: 0, avgCost: avg,
     priced: true, currentPrice: price, priceDate: '2026-11-20', autoPrice: false, invested: qty * avg, proceeds: 0,
-    firstDate: '2026-01-05', lastDate: '2026-01-05', txns }, extra || {});
+    firstDate: '2026-01-05', lastDate: '2026-01-05', txns,
+    firstBuy: txns.filter(t => t.type === 'buy').map(t => t.date).sort()[0] || '' }, extra || {});   // as the backend sends it
 }
 const T = (id, type, date, quantity, price, account) => ({ id, type, date, quantity, price, amount: quantity * price, account, fee: 0, note: '' });
 const holdings = [
