@@ -4,7 +4,7 @@
 // view of your own data; it shows what is happening, it does not recommend what to buy or sell.
 // Loaded as a plain <script>: functions are global so onclick="..." handlers work.
 
-var portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, tradeCount: 0 };
+var portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, birthDate: '', tradeCount: 0 };
 var pfTab = 'allocation';
 var trades = null;                 // from bootstrap, or getTrades
 // False once the backend says it has no trading journal yet (getTrades → Unknown action): the journal is hidden.

@@ -3,6 +3,7 @@
 One line per change the user would notice. Newest first.
 
 ## 2026-11-26
+- RMF: add your birth date in Settings, then on the buy form of a mutual fund tap **RMF**. The buy is locked until the later of age 55 and 5 years after the fund's first purchase (shown as 🔒 on the holding, with the usual warning before selling locked units). A buy that is already past both dates simply isn't locked. Needs the backend redeployed (it deploys from `main` automatically).
 - Mutual funds are now priced from Google Finance, then the Thai SEC — never from Yahoo, so a Thai fund code can't pick up a foreign share's price.
 - "Locked until" on the buy form now only shows for mutual funds.
 

@@ -15,6 +15,7 @@
 //                        TaxOrig = the tax withheld on a dividend in that Currency when it isn't THB (plan C6); Fee stays in THB.
 //                        LockUntil = on a buy of a tax fund (SSF, ThaiESG…): the units can't be sold before this date
 //                        (yyyy-MM-dd, text) without losing the tax benefit. Empty = not locked.
+//                        RMF buys (lockRule "rmf") get the later of: your 55th birthday, 5 years after the fund's first buy.
 //                        SwitchId = the same id on the sell and buy rows of one fund switch (src/17_switch.gs);
 //                        SwitchValue = what the fund house said the switch was worth (THB, for information only).
 //                        New dividends get an Id starting with WD (plan C8); only those are exported to Money Tracker.
@@ -35,7 +36,7 @@
 //    _Export_Values    → Account | Currency | Value | ValueTHB | AsOf          one row per broker + "Other assets" (C7)
 //    _Export_Dividends → Id | Date | Holding | Amount (THB) | OrigAmount | Currency | Tax (THB) | Account   WD… Ids only (C8)
 //  Read from Money Tracker: its tab _Export_LinkedFlows → Id | Date | Account | Amount | Currency (deposits − / withdrawals).
-//  Script Properties: BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY,
+//  Script Properties: BIRTH_DATE (yyyy-MM-dd, for the RMF lock), BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY,
 //    MONEY_SHEET_ID (Money Tracker's spreadsheet id, set by hand, never in code), MONEY_FLOWS_CACHE (last good flows),
 //    FX_RATES (THB per unit from the last price refresh),
 //    SEC_API_KEY (Thai SEC Open API key for fund NAVs, set by hand, never in code), SEC_FUND_IDS (fund → SEC project id cache).

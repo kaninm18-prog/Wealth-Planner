@@ -46,6 +46,7 @@ function dispatch(p) {
       case "refreshPrices":          return jsonResponse(refreshPrices());
       case "setTargets":             return setTargets(p);
       case "setBenchmark":           return setBenchmark(p);
+      case "setBirthDate":           return setBirthDate(p);
       case "getTrades":              return jsonResponse(getTrades());
       case "addTrade":               return addTrade(p);
       case "deleteTrade":            return deleteTrade(p);

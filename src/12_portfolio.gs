@@ -7,7 +7,19 @@ function portfolioMeta() {
   var bench = null;
   try { bench = JSON.parse(props.getProperty("BENCH") || "null"); } catch (e) {}
   return { ok: true, targets: targets, benchmarkSymbol: props.getProperty("BENCH_SYMBOL") || "INDEXBKK:SET",
-           benchmark: bench, tradeCount: Math.max(0, getSheet(SHEET.TRADES).getLastRow() - 1) };
+           benchmark: bench, birthDate: birthDate(), tradeCount: Math.max(0, getSheet(SHEET.TRADES).getLastRow() - 1) };
+}
+// Your birth date, only used to work out when an RMF can be sold (rmfUnlockDate). Kept in Script Properties
+// (never in code or logs); the app holds it in memory while unlocked.
+function birthDate() { return PropertiesService.getScriptProperties().getProperty("BIRTH_DATE") || ""; }
+function setBirthDate(p) {
+  var d = String(p.birthDate || "").trim(), props = PropertiesService.getScriptProperties();
+  if (!d) { props.deleteProperty("BIRTH_DATE"); return jsonResponse({ ok: true, birthDate: "" }); }
+  var real = /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(d + "T00:00:00Z").toISOString().substring(0, 10) === d;
+  if (!real) return jsonResponse({ ok: false, error: "Birth date should be a real date (yyyy-MM-dd)" });
+  if (d > todayStr() || d < "1900-01-01") return jsonResponse({ ok: false, error: "That birth date doesn't look right" });
+  props.setProperty("BIRTH_DATE", d);
+  return jsonResponse({ ok: true, birthDate: d });
 }
 function setTargets(p) {                           // p.targets = { "Gold": 20, "Thai stocks": 30, ... }
   var sh = getSheet(SHEET.TARGETS), last = sh.getLastRow();
