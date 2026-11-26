@@ -5,9 +5,9 @@
 //  Sheets (tabs are created with their headers the first time they are used).
 //  Holdings, HoldingTxns, Trades, AllocationTargets and _Prices have Money Tracker's layout,
 //  so the tabs can be copied across as they are (plan step 5). Never reorder these columns.
-//  HoldingTxns has three extra columns at the end (FeeOrig C3, TaxOrig C6, LockUntil), so it stays a superset of Money Tracker's.
+//  HoldingTxns has extra columns at the end (FeeOrig C3, TaxOrig C6, LockUntil, SwitchId, SwitchValue), so it stays a superset of Money Tracker's.
 //    Holdings          → Id | Name | Kind | Symbol | Unit | CurrentPrice (THB/unit) | PriceDate | Note | Status | QuoteCurrency | NextXD | NextDividend (per unit)
-//    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency | FeeOrig | TaxOrig | LockUntil
+//    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency | FeeOrig | TaxOrig | LockUntil | SwitchId | SwitchValue
 //                        Account = the broker's name (plain text). LinkedId is kept for the layout but stays empty here:
 //                        fees and dividends are not copied into Expenses/Income (those tabs don't exist in this app).
 //                        OrigAmount/Currency = the exact amount in a foreign currency, e.g. USD paid/received.
@@ -15,6 +15,8 @@
 //                        TaxOrig = the tax withheld on a dividend in that Currency when it isn't THB (plan C6); Fee stays in THB.
 //                        LockUntil = on a buy of a tax fund (SSF, ThaiESG…): the units can't be sold before this date
 //                        (yyyy-MM-dd, text) without losing the tax benefit. Empty = not locked.
+//                        SwitchId = the same id on the sell and buy rows of one fund switch (src/17_switch.gs);
+//                        SwitchValue = what the fund house said the switch was worth (THB, for information only).
 //                        New dividends get an Id starting with WD (plan C8); only those are exported to Money Tracker.
 //    Trades            → Id | Ticket | Symbol | Side | Volume | OpenTime | OpenPrice | CloseTime | ClosePrice | Commission | Swap | Profit | Account | Note | Currency
 //                        Trading journal (e.g. XAUUSD on MT5). Profit/Commission/Swap in Currency (usually USD).
@@ -52,7 +54,7 @@ var SHEET = {
 // Column headers for each tab, written when a tab is first created.
 var HEADERS = {};
 HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice","PriceDate","Note","Status","QuoteCurrency","NextXD","NextDividend"];
-HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency","FeeOrig","TaxOrig","LockUntil"];
+HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency","FeeOrig","TaxOrig","LockUntil","SwitchId","SwitchValue"];
 HEADERS[SHEET.TRADES]       = ["Id","Ticket","Symbol","Side","Volume","OpenTime","OpenPrice","CloseTime","ClosePrice","Commission","Swap","Profit","Account","Note","Currency"];
 HEADERS[SHEET.TARGETS]      = ["Class","TargetPct"];
 HEADERS[SHEET.BROKERS]      = ["Name","Currency","DividendsTo","Rate","Note","OpeningCash"];

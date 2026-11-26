@@ -17,14 +17,14 @@ function setup() {
   return { api: b.api, context: b.context, sheets: b.sheets, holding, rows, buyNew };
 }
 
-test('tabs have Money Tracker\'s columns, so they can be copied across as they are (HoldingTxns adds FeeOrig, TaxOrig, LockUntil at the end)', () => {
+test('tabs have Money Tracker\'s columns, so they can be copied across as they are (HoldingTxns adds FeeOrig, TaxOrig, LockUntil, SwitchId, SwitchValue at the end)', () => {
   const { api, sheets, buyNew } = setup();
   buyNew('PTT', 'stock', 1, 30, 'Broker', '2026-01-10');
   api({ action: 'setTargets', targets: { Gold: 20 } });
   assert.deepEqual([...sheets.Holdings.rows[0]], ['Id', 'Name', 'Kind', 'Symbol', 'Unit', 'CurrentPrice', 'PriceDate', 'Note', 'Status',
     'QuoteCurrency', 'NextXD', 'NextDividend']);
   assert.deepEqual([...sheets.HoldingTxns.rows[0]], ['Id', 'HoldingId', 'Date', 'Type', 'Quantity', 'Price', 'Amount', 'Fee', 'Account', 'Note',
-    'LinkedId', 'OrigAmount', 'Currency', 'FeeOrig', 'TaxOrig', 'LockUntil']);
+    'LinkedId', 'OrigAmount', 'Currency', 'FeeOrig', 'TaxOrig', 'LockUntil', 'SwitchId', 'SwitchValue']);
   assert.deepEqual([...sheets.AllocationTargets.rows[0]], ['Class', 'TargetPct']);
 });
 

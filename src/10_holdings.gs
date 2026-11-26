@@ -15,7 +15,7 @@ function holdingTxnRows() {
       type: String(d[3] || ""), quantity: toFloat(d[4]), price: toFloat(d[5]), amount: toFloat(d[6]),
       fee: toFloat(d[7]), account: String(d[8] || "").trim(), note: String(d[9] || ""), linkedId: String(d[10] || ""),
       origAmount: toFloat(d[11]), currency: String(d[12] || "").toUpperCase(), feeOrig: toFloat(d[13]), taxOrig: toFloat(d[14]),
-      lockUntil: formatDate(d[15]) };
+      lockUntil: formatDate(d[15]), switchId: String(d[16] || ""), switchValue: toFloat(d[17]) };
   });
 }
 
@@ -210,6 +210,8 @@ function addHoldingTxn(p) {
 function deleteHoldingTxn(p) {
   var row = resolveRow(SHEET.HOLDING_TXNS, p);
   if (!row) return staleResponse();
+  var sw = String(getSheet(SHEET.HOLDING_TXNS).getRange(row, 17).getValue() || "");
+  if (sw) return deleteSwitch(sw);                   // a switch goes as a whole: its sell and all its buys
   var sh = getSheet(SHEET.HOLDING_TXNS), d = sh.getRange(row, 1, 1, 11).getValues()[0];
   if (String(d[3]) === "buy") {             // can't remove a buy that later sells depend on
     var h = null; holdingsData().holdings.forEach(function(x){ if (x.id === String(d[1])) h = x; });
