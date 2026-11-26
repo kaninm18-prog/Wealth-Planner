@@ -395,7 +395,10 @@ function setTradeCurrency(c) {
   sel.value = c;
   document.getElementById('tr-rate').value = suggestRate(c);
 }
-function onTradeHolding() { setTradeCurrency(holdingCur(holdingById(document.getElementById('tr-holding').value))); tradeFormUpdate(); }
+function onTradeHolding() {
+  setTradeCurrency(holdingCur(holdingById(document.getElementById('tr-holding').value))); tradeFormUpdate();
+  if (parseInt(document.getElementById('tr-lock-quick').getAttribute('data-years'), 10) === -2) rmfLockDate(true);   // first purchase may differ
+}
 function onTradeCurrency() { setTradeCurrency(tradeCur()); tradeFormUpdate(); }
 // "Locked until": the quick buttons count from the purchase date (and follow it when the date changes).
 function setLockYears(n) {
@@ -408,9 +411,28 @@ function lockYearsPicked(n) {             // n: years of the quick button, 0 = N
   q.setAttribute('data-years', n);
   q.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', parseInt(b.getAttribute('data-years'), 10) === n); });
 }
+// RMF: free at age 55 AND 5 years after the fund's first purchase. The backend works out the real date when it saves
+// (rmfUnlockDate); this only shows it. 29 Feb lands on 1 Mar, like the backend.
+function rmfPlus(s, n) {
+  var p = String(s).split('-'), d = new Date(parseInt(p[0], 10) + n, parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+function rmfLockDate(quiet) {
+  var birth = portfolioMeta.birthDate;
+  if (!birth) { toast('Add your birth date in Settings first (an RMF is locked until age 55)', 5000); return; }
+  var date = document.getElementById('tr-date').value || todayStr(), id = document.getElementById('tr-holding').value;
+  var h = id ? holdingById(id) : null, first = date;
+  if (h) h.txns.forEach(function(t){ if (t.type === 'buy' && t.date && t.date < first) first = t.date; });
+  var a = rmfPlus(birth, 55), b = rmfPlus(first, 5), free = a > b ? a : b;
+  document.getElementById('tr-lock').value = free > date ? free : '';
+  lockYearsPicked(-2);
+  if (free <= date && !quiet) toast('Already past age 55 and 5 years: nothing to lock');
+}
+function setLockRmf() { rmfLockDate(false); }
 function onTradeDate() {
   var n = parseInt(document.getElementById('tr-lock-quick').getAttribute('data-years'), 10);
   if (n > 0) setLockYears(n);
+  else if (n === -2) rmfLockDate(true);
 }
 function setTradeType(t) {
   tradeType = t;
@@ -488,8 +510,10 @@ function saveTrade() {
   if (!h) payload.holding = { name: document.getElementById('tr-name').value.trim(), kind: kind,
     symbol: document.getElementById('tr-symbol').value, unit: asset ? '' : (document.getElementById('tr-unit').value.trim() || kindInfo(kind)[4]) };
   var lock = tradeType === 'buy' && kind === 'fund' ? document.getElementById('tr-lock').value : '';
-  if (lock && lock <= payload.date) { toast('"Locked until" should be after the purchase date'); return; }
-  if (lock) payload.lockUntil = lock;
+  var rmf = tradeType === 'buy' && kind === 'fund' && parseInt(document.getElementById('tr-lock-quick').getAttribute('data-years'), 10) === -2;
+  if (rmf) payload.lockRule = 'rmf';                                               // the backend works out the date
+  else if (lock && lock <= payload.date) { toast('"Locked until" should be after the purchase date'); return; }
+  else if (lock) payload.lockUntil = lock;
   if (!payload.account && (div || payload.fee)) { toast(div ? 'Enter the broker that paid it' : 'Enter the broker the fee was paid at'); return; }
   var cur = tradeCur(), rate = tradeRate();
   if (cur !== 'THB') {                 // typed in a foreign currency → keep the exact amount and fee, store ฿ too

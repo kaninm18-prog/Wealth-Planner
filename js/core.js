@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════
 // Shown in Settings so you can tell whether the phone has the latest update.
 // Bump with every release: the date of the newest CHANGELOG.md heading (add .2, .3 for more the same day).
-var APP_VERSION = '2026.11.26';
+var APP_VERSION = '2026.11.26.1';
 // Storage keys start with "wealth": Money Tracker lives on the same github.io address and shares localStorage.
 // The URL is kept in plain text (it is useless without the token). The token is only in memory while the app is
 // unlocked; at rest it is in the encrypted vault (js/lock.js). Starting, locking and unlocking: js/lockscreen.js.
@@ -45,9 +45,18 @@ function updateScriptUrl() {
     loadAll();
   }).catch(function(){ toast('Could not save the token'); });
 }
+function saveBirthDate() {
+  var v = document.getElementById('settings-birth').value;
+  api({ action: 'setBirthDate', birthDate: v }).then(function(res) {
+    if (!res.ok) { apiError(res); return; }
+    portfolioMeta.birthDate = res.birthDate || '';
+    toast(res.birthDate ? 'Birth date saved' : 'Birth date removed');
+  }).catch(function(){ toast('Needs a connection'); });
+}
 function openSettings() {
   document.getElementById('settings-url').value = SCRIPT_URL;
   document.getElementById('settings-token').value = '';     // never put the token back into the page
+  document.getElementById('settings-birth').value = portfolioMeta.birthDate || '';
   document.getElementById('app-version').textContent = 'Version ' + APP_VERSION;
   openModal('settings-modal');
 }
@@ -115,7 +124,8 @@ function clearAppData() {
   holdings = []; holdingTotals = emptyTotals(); priceInfo = null; loaded = false; fxRates = {};
   brokerData = null; editBrokerName = null; openHoldingId = null; holdCollapsed = {};
   trades = null; tradesLoading = false; journalOn = true; tjPending = null; packPending = null;
-  portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, tradeCount: 0 };
+  portfolioMeta = { targets: {}, benchmarkSymbol: 'INDEXBKK:SET', benchmark: null, birthDate: '', tradeCount: 0 };
+  document.getElementById('settings-birth').value = '';
   document.querySelectorAll('.modal-overlay.open, .annual-modal-overlay.open').forEach(function(m){ m.classList.remove('open'); });
   ['header-total-sub', 'home-totals', 'brokers-section', 'hd-title', 'hd-body', 'hd-actions', 'hd-history', 'bk-body', 'bk-title',
     'pf-body', 'pack-summary', 'tji-summary', 'broker-list', 'tr-holding', 'tr-lock-warn', 'sw-from', 'sw-to', 'sw-preview'].forEach(function(id) {

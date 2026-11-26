@@ -89,7 +89,8 @@ const bootstrap = {
       const body = JSON.parse(route.request().postData() || '{}');
       page.calls.push(body);
       const ans = body.token !== TOKEN ? { ok: false, auth: true, error: 'unauthorized' }
-        : body.action === 'bootstrap' ? bootstrap : { ok: true, updated: [], failed: [], rates: {} };
+        : body.action === 'bootstrap' ? bootstrap : body.action === 'setBirthDate' ? { ok: true, birthDate: body.birthDate }
+        : { ok: true, updated: [], failed: [], rates: {} };
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ans) });
     });
     await page.goto(BASE);
@@ -261,12 +262,45 @@ const bootstrap = {
       assert.match(text, /Delete this switch\? Both funds' entries are removed\./);
       await page.evaluate(() => closeModal('holding-modal'));
     });
+    await check(theme + ': RMF: needs the birth date from Settings; then the RMF button fills the date and the save sends the rule', async () => {
+      await page.evaluate(() => { closeModal('trade-modal'); openTrade('buy', 'H2'); });
+      await page.fill('#tr-date', '2026-11-25'); await page.locator('#tr-date').dispatchEvent('change');
+      await page.click('#tr-lock-quick >> text=RMF');
+      assert.match(await page.locator('#toast').textContent(), /birth date/i, 'no birth date yet: told where to add it');
+      assert.equal(await page.inputValue('#tr-lock'), '');
+      await page.evaluate(() => { closeModal('trade-modal'); openSettings(); });
+      await page.fill('#settings-birth', '1990-06-15');
+      const n = page.calls.length;
+      await page.click('text=Save birth date');
+      await page.waitForFunction(() => portfolioMeta.birthDate === '1990-06-15');
+      assert.equal(page.calls.slice(n).find(c => c.action === 'setBirthDate').birthDate, '1990-06-15');
+      await page.evaluate(() => { closeModal('settings-modal'); openTrade('buy', 'H2'); });
+      await page.fill('#tr-date', '2026-11-25'); await page.locator('#tr-date').dispatchEvent('change');
+      await page.click('#tr-lock-quick >> text=RMF');
+      assert.equal(await page.inputValue('#tr-lock'), '2045-06-15', 'age 55 is later than 5 years after the fund\'s first buy (2016)');
+      assert.equal(await page.locator('#tr-lock-quick .btn.active').textContent(), 'RMF');
+      await page.fill('#tr-date', '2027-01-10'); await page.locator('#tr-date').dispatchEvent('change');
+      assert.equal(await page.inputValue('#tr-lock'), '2045-06-15', 'stays on the rule when the date changes');
+      await fits(page);
+      await shot(page, 'lock-rmf-' + theme);
+      await page.fill('#tr-qty', '10'); await page.fill('#tr-price', '12');
+      const m = page.calls.length;
+      await page.click('#tr-save');
+      await page.waitForFunction(() => !document.querySelector('#trade-modal.open'));
+      const sent = page.calls.slice(m).find(c => c.action === 'addHoldingTxn');
+      assert.equal(sent.lockRule, 'rmf'); assert.equal(sent.lockUntil, undefined, 'the backend works out the date');
+      await page.evaluate(() => { portfolioMeta.birthDate = '1960-01-01'; closeModal('holding-modal'); openTrade('buy', 'H2'); });
+      await page.click('#tr-lock-quick >> text=RMF');
+      assert.equal(await page.inputValue('#tr-lock'), '', 'already 55 and held 5 years: nothing to lock');
+      await page.evaluate(() => { portfolioMeta.birthDate = '1990-06-15'; });
+    });
     await check(theme + ': lock forgets the folded groups; the Type | Broker choice stays', async () => {
       await page.evaluate(() => openTrade('sell', 'H2'));
       await page.fill('#tr-qty', '900');
       await page.evaluate(() => lockNow());
       assert.deepEqual(await page.evaluate(() => holdCollapsed), {});
       assert.equal(await page.locator('#tr-lock-warn').textContent(), '', 'the sell warning is emptied');
+      assert.equal(await page.evaluate(() => portfolioMeta.birthDate + '|' + document.getElementById('settings-birth').value), '|', 'the birth date is forgotten');
       assert.equal(await page.locator('#sw-preview').textContent(), '', 'the switch preview is emptied');
       assert.equal(await page.locator('#sw-from option').count(), 0);
       assert.equal(await page.locator('#holdings-section').textContent().then(t => /Finnomena|KFSSF/.test(t)), false);

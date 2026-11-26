@@ -25,6 +25,13 @@ function holdingTxnRows() {
 // A lot is locked while LockUntil > today; on the LockUntil date itself it is free.
 // → { lots: [{ id, date, quantity, lockUntil, locked }] (what is left of each buy, oldest first),
 //     lockedQty, freeQty, nextUnlock: { date, quantity } | null }
+// RMF (retirement mutual fund): units can be sold without losing the tax benefit once you are 55 AND 5 years have
+// passed since the first purchase of the fund. So each buy is locked until the later of the two dates. (A 29 Feb
+// date lands on 1 Mar in a non-leap year: the later day, so it never says "free" a day early.)
+function rmfUnlockDate(birthDate, firstBuyDate) {
+  var age = addMonths(birthDate, 55 * 12), held = addMonths(firstBuyDate, 5 * 12);
+  return age > held ? age : held;
+}
 function lockedLots(mine, today) {
   var lots = [];
   mine.forEach(function(t) {
@@ -147,6 +154,8 @@ function addHoldingTxn(p) {
   var type = String(p.type || "");
   if (["buy", "sell", "dividend"].indexOf(type) < 0) return jsonResponse({ ok: false, error: "Unknown type" });
   if (p.id && idExists(SHEET.HOLDING_TXNS, p.id)) return jsonResponse({ ok: true, duplicate: true, id: p.id });
+  var rmfRule = type === "buy" && String(p.lockRule || "") === "rmf";
+  if (rmfRule && !birthDate()) return jsonResponse({ ok: false, error: "Add your birth date in Settings first (an RMF is locked until age 55)" });
   var holdingId = String(p.holdingId || "");
   if (!holdingId) {                                   // first purchase creates the holding
     if (type !== "buy") return jsonResponse({ ok: false, error: "Choose what you are selling" });
@@ -163,6 +172,13 @@ function addHoldingTxn(p) {
   if (type !== "dividend" && qty <= 0) return jsonResponse({ ok: false, error: "Enter a quantity" });
   if (type === "sell" && qty > h.quantity + 1e-9) return jsonResponse({ ok: false, error: "You only hold " + h.quantity + (h.unit ? " " + h.unit : "") });
   var lockUntil = type === "buy" ? String(p.lockUntil || "").trim() : "";
+  if (rmfRule) {
+    var birth = birthDate();
+    var firstBuy = date;                              // the 5 years count from the first purchase of this fund
+    (h.txns || []).forEach(function(t){ if (t.type === "buy" && t.date && t.date < firstBuy) firstBuy = t.date; });
+    lockUntil = rmfUnlockDate(birth, firstBuy);
+    if (lockUntil <= date) lockUntil = "";            // already 55 and held 5 years: nothing to lock
+  }
   if (lockUntil && !/^\d{4}-\d{2}-\d{2}$/.test(lockUntil)) return jsonResponse({ ok: false, error: "Locked until should be a date (yyyy-MM-dd)" });
   if (lockUntil && lockUntil <= date) return jsonResponse({ ok: false, error: "Locked until should be after the purchase date" });
   // account may be empty for buy/sell = something you already owned (no cash moves)
@@ -205,7 +221,7 @@ function addHoldingTxn(p) {
     hs.getRange(hrow, 7).setNumberFormat("@");
     hs.getRange(hrow, 6, 1, 2).setValues([[price, date]]);
   }
-  return jsonResponse({ ok: true, id: id, holdingId: holdingId });
+  return jsonResponse({ ok: true, id: id, holdingId: holdingId, lockUntil: lockUntil });
 }
 function deleteHoldingTxn(p) {
   var row = resolveRow(SHEET.HOLDING_TXNS, p);
