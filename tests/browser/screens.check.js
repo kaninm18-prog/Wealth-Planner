@@ -191,6 +191,22 @@ const bootstrap = {
       assert.equal(sent.lockUntil, '2031-12-31'); assert.equal(sent.date, '2024-02-29');
       await page.evaluate(() => { closeModal('holding-modal'); openTrade('buy', 'H4'); });
       assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'not for a car');
+      await page.evaluate(() => openTrade('buy', 'H1'));
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'only for funds: not for a stock (PTT)');
+      await page.evaluate(() => openTrade('buy'));            // a new holding: follows the Type chosen
+      await page.selectOption('#tr-kind', 'stock');
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'new stock: hidden');
+      await page.selectOption('#tr-kind', 'fund');
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), true, 'new mutual fund: shown');
+      await page.click('#tr-lock-quick >> text=+10 years');
+      await page.selectOption('#tr-kind', 'etf');
+      assert.equal(await page.locator('#tr-lock-group').isVisible(), false, 'new ETF: hidden');
+      await page.fill('#tr-name', 'Some ETF'); await page.fill('#tr-qty', '1'); await page.fill('#tr-price', '10');
+      const m = page.calls.length;
+      await page.click('#tr-save');
+      await page.waitForFunction(() => !document.querySelector('#trade-modal.open'));
+      assert.equal(page.calls.slice(m).find(c => c.action === 'addHoldingTxn').lockUntil, undefined, 'a hidden date is not sent');
+      await page.evaluate(() => closeModal('holding-modal'));
       await page.evaluate(() => { openTrade('sell', 'H2'); });
       await page.fill('#tr-qty', '900');
       assert.equal(await page.locator('#tr-lock-warn').isVisible(), true);

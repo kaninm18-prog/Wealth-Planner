@@ -69,6 +69,9 @@ function goodNumber(v) { return typeof v === "number" && isFinite(v) && v > 0; }
 var YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/";
 // The Yahoo symbol for a holding, or "" when there is no safe one.
 function yahooSymbol(h) {
+  // Funds never go to Yahoo (Arm's choice): a Thai fund code could match a foreign ticker and take its price.
+  // They go Google Finance → Thai SEC (src/16_sec_nav.gs).
+  if (h.kind === "fund") return "";
   if (goldUnit(h.symbol, h.unit, h.kind)) return "GC=F";            // gold, USD per troy ounce (futures ≈ spot)
   var q = quoteSymbol(h.symbol);
   if (!q || /^CURRENCY:/.test(q)) return "";
@@ -141,7 +144,7 @@ function refreshPrices() {
     if (q && q.price) {
       px[i][1] = q.price; px[i][2] = "THB"; navDate[i] = q.date; delete why[i];
       result.sources[h.name] = "Thai SEC (" + sSym[i] + ", NAV of " + q.date + ")";
-    } else why[i] = "no price from Google Finance or Yahoo; " + ((q && q.error) || "no price from the SEC");
+    } else why[i] = "no price from Google Finance" + (ySym[i] ? " or Yahoo" : "") + "; " + ((q && q.error) || "no price from the SEC");
   });
   // 2) exchange rates for every non-THB quote currency and broker currency
   var curs = {}, brokers = brokerRows();

@@ -18,9 +18,12 @@ function setup(opts) {
   b.context.UrlFetchApp = { fetchAll(reqs) {
     return reqs.map(r => {
       const u = new URL(r.url);
-      if (u.hostname !== 'api.sec.or.th') {                                     // Yahoo: nothing for a Thai fund
-        log.push({ host: u.hostname });
-        return { getResponseCode: () => 404, getContentText: () => '{"chart":{"result":null}}' };
+      if (u.hostname !== 'api.sec.or.th') {                                     // Yahoo: opts.yahoo prices, else nothing
+        const sym = decodeURIComponent(u.pathname.split('/chart/')[1] || '');
+        log.push({ host: u.hostname, yahoo: sym });
+        const y = (opts.yahoo || {})[sym];
+        return y ? { getResponseCode: () => 200, getContentText: () => JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: y[0], currency: y[1] } }] } }) }
+                 : { getResponseCode: () => 404, getContentText: () => '{"chart":{"result":null}}' };
       }
       log.push({ host: u.hostname, path: u.pathname, q: Object.fromEntries(u.searchParams), key: r.headers['Ocp-Apim-Subscription-Key'] });
       if (opts.status) return { getResponseCode: () => opts.status, getContentText: () => '' };
@@ -74,7 +77,7 @@ test('weekend: on Sunday the NAV is Friday\'s; nothing for 7 days says so', () =
   sec.nav['M0123_2560'] = [nav('M0123_2560', '2026-11-20', 11.5)];
   const res = b.api({ action: 'refreshPrices' });
   near(holding('KFSSF').currentPrice, 11.5); assert.equal(holding('KFSSF').priceDate, '2026-11-20');
-  assert.deepEqual(res.failed, ['Dormant (SEC:DORM): no price from Google Finance or Yahoo; no NAV at the SEC in the last 7 days']);
+  assert.deepEqual(res.failed, ['Dormant (SEC:DORM): no price from Google Finance; no NAV at the SEC in the last 7 days']);
   const q = secCalls().find(c => c.path.endsWith('/nav')).q;
   assert.equal(q.start_nav_date, '2026-11-15'); assert.equal(q.end_nav_date, '2026-11-22');
 });
@@ -114,7 +117,7 @@ test('no key yet → a clear reason and no request to the SEC', () => {
   const { b, fund, secCalls } = setup({ key: false });
   fund('KFSSF', 'SEC:KFSSF');
   const res = b.api({ action: 'refreshPrices' });
-  assert.deepEqual(res.failed, ['KFSSF (SEC:KFSSF): no price from Google Finance or Yahoo; no SEC API key yet — add the Script Property SEC_API_KEY']);
+  assert.deepEqual(res.failed, ['KFSSF (SEC:KFSSF): no price from Google Finance; no SEC API key yet — add the Script Property SEC_API_KEY']);
   assert.equal(secCalls().length, 0);
 });
 
@@ -151,24 +154,40 @@ test('the project id is looked up once: the second refresh uses the cache', () =
   assert.deepEqual(later.map(c => c.path), ['/v2/fund/daily-info/nav'], 'only the NAV is asked');
 });
 
-test('order: Google Finance first, then Yahoo, then the SEC; stocks are never sent to the SEC', () => {
-  const { b, sec, fund, log, secCalls } = setup();
+test('order for funds: Google Finance, then the SEC — Yahoo is never asked, even when it has that ticker', () => {
+  // Yahoo "knows" KFSSF and SCBSET as foreign tickers: a fund must never take those prices (Arm's choice)
+  const { b, sec, fund, log, secCalls, holding } = setup({ yahoo: { KFSSF: [99, 'USD'], SCBSET: [55, 'USD'], 'PTT.BK': [33, 'THB'] } });
   fund('Priced by Google', 'SEC:GOOGLED');
   b.context.evalFormulas = formulas => formulas.map(f => {
     const l = f[0].replace(/^="|"$/g, '');
+    if (l === 'USD') return [l, 35, ''];
     return [l, l === 'SEC:GOOGLED' ? 20 : '', l === 'SEC:GOOGLED' ? 'THB' : ''];
   });
-  fund('KFSSF', 'KFSSF');
+  fund('KFSSF', 'KFSSF');                                         // plain fund symbols
+  fund('No NAV', 'SCBSET');
   sec.profiles.KFSSF = [profile('M0123_2560', 'KFSSF')];
   sec.nav['M0123_2560'] = [nav('M0123_2560', '2026-11-24', 12.3)];
   const r = b.api({ action: 'addHoldingTxn', type: 'buy', holding: { name: 'PTT', kind: 'stock' }, quantity: 1, price: 30, account: 'KS', date: '2026-01-10' });
   b.api({ action: 'updateHolding', id: r.holdingId, symbol: 'PTT.BK' });
   const res = b.api({ action: 'refreshPrices' });
   assert.equal(res.sources['Priced by Google'], 'Google Finance');
-  const yahooFirst = log.findIndex(x => x.host !== 'api.sec.or.th'), secFirst = log.findIndex(x => x.host === 'api.sec.or.th');
-  assert.ok(yahooFirst >= 0 && yahooFirst < secFirst, 'Yahoo is asked before the SEC');
-  assert.deepEqual(secCalls().filter(c => c.path.endsWith('/profiles')).map(c => c.q.project_info), ['KFSSF'], 'only the fund Google and Yahoo missed');
-  assert.match(res.failed[0], /^PTT \(PTT\.BK\): Yahoo answered 404$/, 'a stock keeps its own reason');
+  assert.equal(res.sources.KFSSF, 'Thai SEC (KFSSF, NAV of 2026-11-24)');
+  near(holding('KFSSF').currentPrice, 12.3, 'not Yahoo\'s 99 USD');
+  assert.deepEqual(log.filter(x => x.yahoo !== undefined).map(x => x.yahoo), ['PTT.BK'], 'Yahoo is only asked for the stock');
+  assert.equal(res.sources.PTT, 'Yahoo Finance (PTT.BK)', 'other kinds keep Google → Yahoo');
+  assert.deepEqual(secCalls().filter(c => c.path.endsWith('/profiles')).map(c => c.q.project_info).sort(), ['KFSSF', 'SCBSET'],
+    'only the funds Google missed; the stock never goes to the SEC');
+  assert.deepEqual(res.failed, ['No NAV (SCBSET): no price from Google Finance; fund not found at the SEC — check the abbreviation (e.g. KFSSF, or SEC:KFSSF-A for a class)']);
+});
+
+test('yahooSymbol: never for a fund (testPriceSources shows no Yahoo symbol for it)', () => {
+  const { b, sec, fund } = setup();
+  assert.equal(b.context.yahooSymbol({ kind: 'fund', symbol: 'KFSSF', unit: 'units' }), '');
+  assert.equal(b.context.yahooSymbol({ kind: 'stock', symbol: 'VOO', unit: '' }), 'VOO');
+  fund('KFSSF', 'KFSSF');
+  sec.profiles.KFSSF = [profile('M0123_2560', 'KFSSF')];
+  sec.nav['M0123_2560'] = [nav('M0123_2560', '2026-11-24', 12.3)];
+  assert.match(b.context.testPriceSources()[0], /^KFSSF — Google Finance: none · Yahoo \(no symbol\): not asked · SEC KFSSF: 12\.3 THB/);
 });
 
 test('secSymbol: funds only; SEC: prefix; other exchanges are never sent', () => {
