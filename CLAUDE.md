@@ -28,7 +28,7 @@ Data flow: app → `api(payload)` in `js/core.js` → POST to the Apps Script UR
 - Dividends: each broker has a setting, paid to the broker account or to a chosen bank account. Every dividend is always recorded here
   **and** as Income in Money Tracker. Fees are recorded here only.
 - Cost basis uses the average-cost method.
-- RMF buys (`lockRule: "rmf"`) are locked until the **later** of the 55th birthday and 5 years after the fund's **first** buy (`rmfUnlockDate`, `src/10_holdings.gs`); the birth date is the Script Property `BIRTH_DATE`, set in Settings, held in memory only while unlocked. Saved `LockUntil` dates are never rewritten.
+- RMF buys (`lockRule: "rmf"`) are locked until the **later** of the 55th birthday and 5 years after the fund's **first** buy, carried through fund switches (`rmfUnlockDate`, `firstBuyDates`, `src/10_holdings.gs`); the birth date is the Script Property `BIRTH_DATE`, set in Settings, held in memory only while unlocked. Saved `LockUntil` dates are never rewritten.
 
 ## Working on the code
 

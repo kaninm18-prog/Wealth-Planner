@@ -32,6 +32,28 @@ function rmfUnlockDate(birthDate, firstBuyDate) {
   var age = addMonths(birthDate, 55 * 12), held = addMonths(firstBuyDate, 5 * 12);
   return age > held ? age : held;
 }
+// When each holding was first bought, for the RMF rule: a fund switched in counts from the first buy of the fund
+// it came from (and so on back), so a switch never restarts the 5 years (Arm's choice, 2026-11-26).
+// → { holdingId: "yyyy-MM-dd" }
+function firstBuyDates(txns) {
+  var own = {}, src = {}, soldBy = {}, out = {};
+  txns.forEach(function(t){ if (t.type === "sell" && t.switchId) soldBy[t.switchId] = t.holdingId; });
+  txns.forEach(function(t) {
+    if (t.type !== "buy" || !t.date) return;
+    if (!own[t.holdingId] || t.date < own[t.holdingId]) own[t.holdingId] = t.date;
+    var from = t.switchId ? soldBy[t.switchId] : "";
+    if (from && from !== t.holdingId) (src[t.holdingId] = src[t.holdingId] || []).push(from);
+  });
+  function first(id, seen) {
+    if (seen[id]) return "";                       // switched back and forth (A → B → A): already counted
+    seen[id] = true;
+    var d = own[id] || "";
+    (src[id] || []).forEach(function(s){ var x = first(s, seen); if (x && (!d || x < d)) d = x; });
+    return d;
+  }
+  Object.keys(own).forEach(function(id){ out[id] = first(id, {}); });
+  return out;
+}
 function lockedLots(mine, today) {
   var lots = [];
   mine.forEach(function(t) {
@@ -62,7 +84,7 @@ function lockedLots(mine, today) {
 }
 
 function holdingsData() {
-  var txns = holdingTxnRows(), today = todayStr();
+  var txns = holdingTxnRows(), today = todayStr(), firstBuy = firstBuyDates(txns);
   var holdings = sheetToRows(getSheet(SHEET.HOLDINGS), function(d, ri) {
     var kind = String(d[2] || "other");
     return { rowIndex: ri, id: String(d[0] || ""), name: String(d[1] || ""), kind: kind,
@@ -98,6 +120,7 @@ function holdingsData() {
     // the lots only matter (and are only sent) when some buy of this holding has a LockUntil date
     h.lots = mine.some(function(t){ return t.type === "buy" && t.lockUntil; }) ? lk.lots : [];
     h.txns = mine.slice().reverse();
+    h.firstBuy = firstBuy[h.id] || "";             // first purchase, carried through fund switches (RMF rule)
     h.autoPrice = h.group === "investment" && !!priceSource(h);
     h.proceeds = round2(mine.reduce(function(a, t){ return a + (t.type === "sell" ? t.amount : 0); }, 0));
     var trades = mine.filter(function(t){ return t.type !== "dividend"; });
@@ -174,9 +197,8 @@ function addHoldingTxn(p) {
   var lockUntil = type === "buy" ? String(p.lockUntil || "").trim() : "";
   if (rmfRule) {
     var birth = birthDate();
-    var firstBuy = date;                              // the 5 years count from the first purchase of this fund
-    (h.txns || []).forEach(function(t){ if (t.type === "buy" && t.date && t.date < firstBuy) firstBuy = t.date; });
-    lockUntil = rmfUnlockDate(birth, firstBuy);
+    // the 5 years count from the fund's first purchase, carried through switches (firstBuyDates)
+    lockUntil = rmfUnlockDate(birth, h.firstBuy && h.firstBuy < date ? h.firstBuy : date);
     if (lockUntil <= date) lockUntil = "";            // already 55 and held 5 years: nothing to lock
   }
   if (lockUntil && !/^\d{4}-\d{2}-\d{2}$/.test(lockUntil)) return jsonResponse({ ok: false, error: "Locked until should be a date (yyyy-MM-dd)" });

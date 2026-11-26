@@ -422,7 +422,7 @@ function rmfLockDate(quiet) {
   if (!birth) { toast('Add your birth date in Settings first (an RMF is locked until age 55)', 5000); return; }
   var date = document.getElementById('tr-date').value || todayStr(), id = document.getElementById('tr-holding').value;
   var h = id ? holdingById(id) : null, first = date;
-  if (h) h.txns.forEach(function(t){ if (t.type === 'buy' && t.date && t.date < first) first = t.date; });
+  if (h && h.firstBuy && h.firstBuy < first) first = h.firstBuy;       // carried through fund switches (backend)
   var a = rmfPlus(birth, 55), b = rmfPlus(first, 5), free = a > b ? a : b;
   document.getElementById('tr-lock').value = free > date ? free : '';
   lockYearsPicked(-2);

@@ -15,7 +15,8 @@
 //                        TaxOrig = the tax withheld on a dividend in that Currency when it isn't THB (plan C6); Fee stays in THB.
 //                        LockUntil = on a buy of a tax fund (SSF, ThaiESG…): the units can't be sold before this date
 //                        (yyyy-MM-dd, text) without losing the tax benefit. Empty = not locked.
-//                        RMF buys (lockRule "rmf") get the later of: your 55th birthday, 5 years after the fund's first buy.
+//                        RMF buys (lockRule "rmf") get the later of: your 55th birthday, 5 years after the fund's first buy
+//                        (a fund switched in counts from the first buy of the fund it came from).
 //                        SwitchId = the same id on the sell and buy rows of one fund switch (src/17_switch.gs);
 //                        SwitchValue = what the fund house said the switch was worth (THB, for information only).
 //                        New dividends get an Id starting with WD (plan C8); only those are exported to Money Tracker.

@@ -63,7 +63,7 @@ test('the 5 years count from the fund\'s first buy, not from each buy', () => {
 
 test('already 55 and held 5 years: nothing to lock (no error, no LockUntil)', () => {
   const { buy, buyMore, holding, stored } = setup('1960-01-01');
-  const first = buy('KFRMF', '2019-01-01');                              // 5 years: 2024-01-01 → nothing locks on 2019? 55 passed, 5y after
+  const first = buy('KFRMF', '2019-01-01');                              // 55 since 2015, so 5 years decide
   assert.equal(first.lockUntil, '2024-01-01', 'a 2019 buy is locked until 2024');
   const later = buyMore(first.holdingId, '2026-11-25');
   assert.ok(later.ok, later.error);
@@ -88,12 +88,50 @@ test('the rule only applies to buys; an explicit date without the rule is kept a
   assert.equal(typed.lockUntil, '2030-01-01');
 });
 
-test('selling locked RMF units takes the oldest first; a switch keeps their lock dates', () => {
+test('the buy shows as a locked lot; changing the birth date later never rewrites it', () => {
   const { b, buy, holding } = setup('1990-06-15');
-  const first = buy('KFRMF', '2026-11-25');
+  assert.ok(buy('KFRMF', '2026-11-25').ok);
   const h = holding('KFRMF');
   assert.equal(h.lots.length, 1); assert.equal(h.lots[0].lockUntil, '2045-06-15'); assert.equal(h.lots[0].locked, true);
-  assert.equal(first.ok, true);
   assert.equal(b.api({ action: 'setBirthDate', birthDate: '1990-06-16' }).ok, true);
   assert.equal(holding('KFRMF').lots[0].lockUntil, '2045-06-15', 'changing the birth date later never rewrites saved buys');
+});
+
+test('after a fund switch, the 5 years still count from the original first purchase (also through a chain of switches)', () => {
+  const { b, buy, buyMore, holding } = setup('1965-01-10');             // 55 since 2020, so 5 years decide
+  const kf = buy('KFRMF', '2023-03-01');
+  assert.equal(kf.lockUntil, '2028-03-01');
+  const sw1 = b.api({ action: 'addSwitch', fromId: kf.holdingId, toHolding: { name: 'SCBRMF' }, unitsOut: 100, unitsIn: 90,
+    account: 'KS', date: '2026-01-10' });
+  assert.ok(sw1.ok, sw1.error);
+  const scb = holding('SCBRMF');
+  assert.equal(scb.firstBuy, '2023-03-01', 'not the switch date');
+  assert.equal(holding('KFRMF').firstBuy, '2023-03-01');
+  const more = buyMore(scb.id, '2026-11-25');
+  assert.equal(more.lockUntil, '2028-03-01', 'not 2031-01-10 (switch) or 2031-11-25 (this buy)');
+  const sw2 = b.api({ action: 'addSwitch', fromId: scb.id, toHolding: { name: 'TRMF' }, unitsOut: 50, unitsIn: 50,
+    account: 'KS', date: '2026-11-25' });
+  assert.ok(sw2.ok, sw2.error);
+  assert.equal(holding('TRMF').firstBuy, '2023-03-01', 'carried through two switches');
+  assert.equal(buyMore(holding('TRMF').id, '2026-11-25').lockUntil, '2028-03-01');
+});
+
+test('a fund bought before anything was switched into it keeps its own earlier first purchase', () => {
+  const { b, buy, buyMore, holding } = setup('1965-01-10');
+  const old = buy('OLDRMF', '2021-05-05');                               // the target, bought first
+  const src = buy('NEWRMF', '2024-02-02');
+  const sw = b.api({ action: 'addSwitch', fromId: src.holdingId, toId: old.holdingId, unitsOut: 100, unitsIn: 100, account: 'KS', date: '2026-01-10' });
+  assert.ok(sw.ok, sw.error);
+  assert.equal(holding('OLDRMF').firstBuy, '2021-05-05');
+  assert.equal(buyMore(old.holdingId, '2026-11-25').lockUntil, '', '2026-05-05 has passed: nothing to lock');
+  assert.equal(holding('NEWRMF').firstBuy, '2024-02-02', 'the source fund is not affected');
+});
+
+test('switching back and forth does not loop', () => {
+  const { b, buy, holding } = setup('1965-01-10');
+  const a = buy('ARMF', '2023-03-01');
+  assert.ok(b.api({ action: 'addSwitch', fromId: a.holdingId, toHolding: { name: 'BRMF' }, unitsOut: 60, unitsIn: 60, account: 'KS', date: '2025-01-01' }).ok);
+  assert.ok(b.api({ action: 'addSwitch', fromId: holding('BRMF').id, toId: a.holdingId, unitsOut: 30, unitsIn: 30, account: 'KS', date: '2026-01-01' }).ok);
+  assert.equal(holding('ARMF').firstBuy, '2023-03-01');
+  assert.equal(holding('BRMF').firstBuy, '2023-03-01');
 });
