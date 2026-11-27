@@ -80,6 +80,7 @@ function addSwitch(p) {
       if (!hrow) return;
       hs.getRange(hrow, 7).setNumberFormat("@");
       hs.getRange(hrow, 6, 1, 2).setValues([[Math.round(x[1] * 10000) / 10000, date]]);
+      setPriceSource(hs, hrow, "market");             // the fund house's value on the switch date
     });
   }
   return jsonResponse({ ok: true, id: swId, fromId: from.id, toId: to.id, cost: round2(cost), buys: buys.length });

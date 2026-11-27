@@ -41,7 +41,7 @@ function H(id, name, kind, qty, price, avg, txns, extra) {
 }
 const T = (id, type, date, quantity, price, account) => ({ id, type, date, quantity, price, amount: quantity * price, account, fee: 0, note: '' });
 const holdings = [
-  H('H1', 'PTT', 'stock', 100, 35, 30, [T('X1', 'buy', '2026-01-05', 100, 30, 'Kasikorn Securities')], { symbol: 'PTT.BK', unit: 'shares' }),
+  H('H1', 'PTT', 'stock', 100, 35, 30, [T('X1', 'buy', '2026-01-05', 100, 30, 'Kasikorn Securities')], { symbol: 'PTT.BK', unit: 'shares', autoPrice: true, priceSource: 'market' }),
   // a tax fund: the 2016 lot is free since 2026-02-01, the 2026 lot is locked until 2036 (sales come from the oldest units first)
   H('H2', 'KFSSF', 'fund', 1000, 12, 11, [Object.assign(T('X3', 'buy', '2026-01-10', 600, 11, 'Kasikorn Securities'), { lockUntil: '2036-01-10' }),
     Object.assign(T('X2', 'buy', '2016-02-01', 400, 11, 'Finnomena'), { lockUntil: '2026-02-01' }),
@@ -51,7 +51,9 @@ const holdings = [
              { id: 'X3', date: '2026-01-10', quantity: 600, lockUntil: '2036-01-10', locked: true }] }),
   // switched in from KFSSF (cost carried over): SwitchId links both sides
   H('H6', 'SCBSSF', 'fund', 50, 12, 10, [Object.assign(T('X9', 'buy', '2015-12-01', 50, 10, 'Kasikorn Securities'), { switchId: 'SW1', switchValue: 600, lockUntil: '2030-06-15' })]),
-  H('H3', 'Gold bar', 'gold', 1, 42000, 40000, [T('X4', 'buy', '2026-02-01', 1, 40000, '')], { unit: 'baht-weight' }),
+  // price still the purchase placeholder: the last refresh couldn't reach Yahoo
+  H('H3', 'Gold bar', 'gold', 1, 42000, 40000, [T('X4', 'buy', '2026-02-01', 1, 40000, '')], { unit: 'baht-weight', autoPrice: true,
+    priceSource: 'trade', priceDate: '2026-02-01', priceError: 'Yahoo not allowed yet — run testPriceSources once in Apps Script' }),
   H('H4', 'Honda Jazz', 'vehicle', 1, 450000, 500000, [T('X5', 'buy', '2025-06-01', 1, 500000, '')]),
   H('H5', 'Sold out', 'stock', 0, 40, 0, [T('X7', 'sell', '2026-05-01', 10, 40, 'Kasikorn Securities'), T('X6', 'buy', '2026-01-02', 10, 30, 'Kasikorn Securities')],
     { realized: 100, invested: 300, proceeds: 400 }),
@@ -261,6 +263,26 @@ const bootstrap = {
       page.once('dialog', d => { text = d.message(); d.dismiss(); });
       await page.locator('#hd-history .hd-txn', { hasText: 'Switched to' }).locator('button').click();
       assert.match(text, /Delete this switch\? Both funds' entries are removed\./);
+      await page.evaluate(() => closeModal('holding-modal'));
+    });
+    await check(theme + ': a purchase-price placeholder is labelled on the card and explained in the detail; a market price is "live"', async () => {
+      await page.evaluate(() => document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open')));   // keep the grouping the earlier checks chose
+      const card = name => page.locator('#holdings-section .hold-card', { hasText: name }).first();
+      assert.equal(await card('Gold bar').locator('.price-ph').textContent(), 'purchase price');
+      assert.equal(await card('Gold bar').locator('.live-badge').count(), 0, 'not "live" while it is the purchase price');
+      assert.ok(!/now ฿/.test(await card('Gold bar').textContent()), 'no "now ฿…" for a purchase price');
+      assert.equal(await card('PTT').locator('.live-badge').count(), 1);
+      assert.equal(await card('PTT').locator('.price-ph').count(), 0);
+      await page.evaluate(() => openHolding('H3'));
+      const note = await page.locator('#hd-body .price-note').textContent();
+      assert.match(note, /฿42,000 per baht-weight is the price from your purchase on 1 Feb 2026, not a market price/);
+      assert.match(note, /Last price refresh: Yahoo not allowed yet — run testPriceSources once in Apps Script\./);
+      assert.match(await page.locator('#hd-body .hd-stat', { hasText: 'Value' }).textContent(), /at your purchase price/);
+      await fits(page);
+      await page.waitForTimeout(450);
+      await shot(page, 'price-placeholder-' + theme);
+      await page.evaluate(() => { closeModal('holding-modal'); openHolding('H1'); });
+      assert.equal(await page.locator('#hd-body .price-note').count(), 0, 'a market price has no note');
       await page.evaluate(() => closeModal('holding-modal'));
     });
     await check(theme + ': RMF: needs the birth date from Settings; then the RMF button fills the date and the save sends the rule', async () => {

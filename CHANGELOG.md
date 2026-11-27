@@ -2,6 +2,9 @@
 
 One line per change the user would notice. Newest first.
 
+## 2026-11-27
+- A holding whose price is still the one from your purchase (no market price found yet) now says so: **PURCHASE PRICE** on its card instead of "live", and in its detail a note with the date of that purchase and why the last price refresh found nothing (for example "Yahoo not allowed yet — run testPriceSources once in Apps Script"). A price you type yourself shows "typed by you". Needs the backend redeployed (it deploys from `main` automatically).
+
 ## 2026-11-26
 - RMF: after a fund switch, new RMF buys in the fund you switched into count their 5 years from your original first purchase, not from the switch date. Needs the backend redeployed (it deploys from `main` automatically).
 - RMF: add your birth date in Settings, then on the buy form of a mutual fund tap **RMF**. The buy is locked until the later of age 55 and 5 years after the fund's first purchase (shown as 🔒 on the holding, with the usual warning before selling locked units). A buy that is already past both dates simply isn't locked. Needs the backend redeployed (it deploys from `main` automatically).

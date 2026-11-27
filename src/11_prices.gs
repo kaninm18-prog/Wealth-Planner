@@ -171,12 +171,14 @@ function refreshPrices() {
     props.setProperty("FX_RATES", JSON.stringify(Object.assign(saved, result.rates)));
   }
   // 3) write holding prices (in baht)
+  var failedById = {};
   data.forEach(function(h, i) {
     var price = px[i] ? px[i][1] : "", cur = String(px[i] ? px[i][2] : "").toUpperCase() || "THB";
     if (goodNumber(price) && cur === "GBX") { price = price / 100; cur = "GBP"; }   // London quotes in pence
     var thb = goodNumber(price) ? (cur === "THB" ? price : (result.rates[cur] ? price * result.rates[cur] : 0)) : 0;
     if (!thb) {
       var reason = why[i] || (goodNumber(price) ? "no " + cur + " → THB rate" : "no price");
+      failedById[h.id] = reason;
       result.failed.push(h.name + (h.symbol ? " (" + h.symbol + ")" : "") + ": " + reason);
       delete result.sources[h.name];
       return;
@@ -187,8 +189,11 @@ function refreshPrices() {
     hs.getRange(row, 6, 1, 2).setValues([[Math.round(thb * 10000) / 10000, navDate[i] || today]]);   // a NAV is for its own date
     ensureHeaders(hs, 10, ["QuoteCurrency", "NextXD", "NextDividend"]);
     hs.getRange(row, 10).setValue(cur);
+    setPriceSource(hs, row, "market");
     result.updated.push(h.name);
   });
+  // why each holding got no price, shown with its placeholder price in the app (rebuilt whole: a success clears it)
+  PropertiesService.getScriptProperties().setProperty("PRICE_FAILED", JSON.stringify(failedById));
   try { result.benchmark = fetchBenchmark(); } catch (e) { result.benchmark = { ok: false, error: e.message }; }
   PropertiesService.getScriptProperties().setProperty("LAST_PRICE_REFRESH", new Date().toISOString());
   return result;
