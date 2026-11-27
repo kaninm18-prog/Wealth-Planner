@@ -13,7 +13,7 @@ is Money Tracker's `docs/stage-4-plan.md`. Read it before changing anything here
 | Offline shell | `sw.js` | Network-first for the app's own files. Bump `CACHE` when you add/rename a cached file. Only ever delete caches named `wealth-planner-…`. |
 | Back end | `src/*.gs` (Google Apps Script) | One web app, `doPost` → `route(p)` in `src/02_api.gs` dispatches on `p.action`. Files are numbered: Apps Script loads them in name order and they share **one global scope**. |
 | Database | Google Sheet "Wealth Planner" | One tab per data type. Column layout is documented at the top of `src/00_config.gs`. |
-| Hosting | GitHub Pages | `https://kaninm18-prog.github.io/wealth-planner/` — pushing to `main` publishes the front end. |
+| Hosting | GitHub Pages | `https://kaninm18-prog.github.io/Wealth-Planner/` (capital W and P: the path matches the repo name and is case-sensitive) — pushing to `main` publishes the front end. |
 
 **Same address as Money Tracker.** Both apps are on `kaninm18-prog.github.io`, so they share `localStorage` and service-worker
 cache storage. Every `localStorage` key here starts with `wealth`, and `sw.js` only touches its own caches.
