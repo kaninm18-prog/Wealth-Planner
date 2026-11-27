@@ -6,7 +6,8 @@
 //  Holdings, HoldingTxns, Trades, AllocationTargets and _Prices have Money Tracker's layout,
 //  so the tabs can be copied across as they are (plan step 5). Never reorder these columns.
 //  HoldingTxns has extra columns at the end (FeeOrig C3, TaxOrig C6, LockUntil, SwitchId, SwitchValue), so it stays a superset of Money Tracker's.
-//    Holdings          → Id | Name | Kind | Symbol | Unit | CurrentPrice (THB/unit) | PriceDate | Note | Status | QuoteCurrency | NextXD | NextDividend (per unit)
+//    Holdings          → Id | Name | Kind | Symbol | Unit | CurrentPrice (THB/unit) | PriceDate | Note | Status | QuoteCurrency | NextXD | NextDividend (per unit) | PriceSource
+//                        PriceSource = where CurrentPrice came from: market (refresh, switch value), manual (typed), trade (last buy/sale: a placeholder)
 //    HoldingTxns       → Id | HoldingId | Date | Type (buy/sell/dividend) | Quantity | Price | Amount (THB) | Fee (dividends: tax withheld) | Account | Note | LinkedId | OrigAmount | Currency | FeeOrig | TaxOrig | LockUntil | SwitchId | SwitchValue
 //                        Account = the broker's name (plain text). LinkedId is kept for the layout but stays empty here:
 //                        fees and dividends are not copied into Expenses/Income (those tabs don't exist in this app).
@@ -37,7 +38,7 @@
 //    _Export_Values    → Account | Currency | Value | ValueTHB | AsOf          one row per broker + "Other assets" (C7)
 //    _Export_Dividends → Id | Date | Holding | Amount (THB) | OrigAmount | Currency | Tax (THB) | Account   WD… Ids only (C8)
 //  Read from Money Tracker: its tab _Export_LinkedFlows → Id | Date | Account | Amount | Currency (deposits − / withdrawals).
-//  Script Properties: BIRTH_DATE (yyyy-MM-dd, for the RMF lock), BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY,
+//  Script Properties: BIRTH_DATE (yyyy-MM-dd, for the RMF lock), BENCH, BENCH_SYMBOL (comparison index), LAST_PRICE_REFRESH, PRICES_DAILY, PRICE_FAILED (why each holding got no price),
 //    MONEY_SHEET_ID (Money Tracker's spreadsheet id, set by hand, never in code), MONEY_FLOWS_CACHE (last good flows),
 //    FX_RATES (THB per unit from the last price refresh),
 //    SEC_API_KEY (Thai SEC Open API key for fund NAVs, set by hand, never in code), SEC_FUND_IDS (fund → SEC project id cache).
@@ -56,7 +57,7 @@ var SHEET = {
 
 // Column headers for each tab, written when a tab is first created.
 var HEADERS = {};
-HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice","PriceDate","Note","Status","QuoteCurrency","NextXD","NextDividend"];
+HEADERS[SHEET.HOLDINGS]     = ["Id","Name","Kind","Symbol","Unit","CurrentPrice","PriceDate","Note","Status","QuoteCurrency","NextXD","NextDividend","PriceSource"];
 HEADERS[SHEET.HOLDING_TXNS] = ["Id","HoldingId","Date","Type","Quantity","Price","Amount","Fee","Account","Note","LinkedId","OrigAmount","Currency","FeeOrig","TaxOrig","LockUntil","SwitchId","SwitchValue"];
 HEADERS[SHEET.TRADES]       = ["Id","Ticket","Symbol","Side","Volume","OpenTime","OpenPrice","CloseTime","ClosePrice","Commission","Swap","Profit","Account","Note","Currency"];
 HEADERS[SHEET.TARGETS]      = ["Class","TargetPct"];

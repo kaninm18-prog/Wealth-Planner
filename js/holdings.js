@@ -26,6 +26,16 @@ function unitPriceHtml(h) {
   var q = String(h.quoteCurrency || '').toUpperCase(), r = q && q !== 'THB' ? savedRates()[q] : 0;
   return 'now ' + fmtMoney(h.currentPrice) + (r ? ' (' + fmtCur(h.currentPrice / r, q) + ')' : '');
 }
+// A price copied from your latest buy or sale (backend PriceSource "trade") is only a placeholder: say so, so it is
+// never mistaken for today's market price (the value and profit are then at what you paid).
+function isPlaceholderPrice(h) { return h && h.group === 'investment' && h.priceSource === 'trade' && h.quantity > 0; }
+function placeholderNoteHtml(h) {
+  if (!isPlaceholderPrice(h)) return '';
+  return '<div class="lock-warn price-note">⚠ ' + (h.currentPrice ? fmtMoney(h.currentPrice) + ' per ' + (h.unit ? recEsc(h.unit.replace(/s$/, '')) : 'unit') + ' is' : 'This is') +
+    ' the price from your purchase' + (h.priceDate ? ' on ' + fmtDateY(h.priceDate) : '') + ', not a market price, so the value and profit are at what you paid.' +
+    (h.priceError ? ' Last price refresh: ' + recEsc(h.priceError) + '.' : h.autoPrice ? ' Tap ↻ Refresh prices on the home screen to get today\'s price.' : '') +
+    ' You can also type today\'s price below.</div>';
+}
 function holdingById(id) { for (var i = 0; i < holdings.length; i++) if (holdings[i].id === id) return holdings[i]; return null; }
 
 // ── exchange rates ──
@@ -84,12 +94,13 @@ function holdCardHtml(it) {
   var h = it.h, k = kindInfo(h.kind), inv = h.group === 'investment';
   var sub = inv
     ? fmtQty(it.qty) + (h.unit ? ' ' + recEsc(h.unit) : '') + (it.split ? ' of ' + fmtQty(h.quantity) : '') +
-      (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '') + (unitPriceHtml(h) ? ' · ' + unitPriceHtml(h) : '')
+      (h.avgCost ? ' · avg ' + fmtMoney(h.avgCost) : '') + (!isPlaceholderPrice(h) && unitPriceHtml(h) ? ' · ' + unitPriceHtml(h) : '')
     : k[2] + (h.priceDate ? ' · valued ' + fmtDate(h.priceDate) : '');
   return '<div class="hold-card" onclick="openHolding(\'' + escQ(h.id) + '\')">' +
     '<div class="hold-icon">' + k[1] + '</div>' +
     '<div style="min-width:0"><div class="hold-name">' + recEsc(h.name) + (h.symbol ? ' <span class="hold-sub">' + recEsc(h.symbol) + '</span>' : '') + '</div>' +
-    '<div class="hold-sub">' + sub + (h.autoPrice ? ' · <span class="live-badge">live</span>' : (!h.priced && inv ? ' · no price yet' : '')) + '</div></div>' +
+    '<div class="hold-sub">' + sub + (isPlaceholderPrice(h) ? ' · <span class="price-ph">purchase price</span>'
+      : h.autoPrice ? ' · <span class="live-badge">live</span>' : (!h.priced && inv ? ' · no price yet' : '')) + '</div></div>' +
     '<div><div class="hold-val">' + fmtMoney(it.value) + '</div><div class="hold-pl">' + plHtml(it.value - it.cost, it.cost) + '</div></div></div>';
 }
 
@@ -187,7 +198,8 @@ function openHolding(id) {
       ['Type', k[2], '']
     ] : [
       ['Holding', fmtQty(h.quantity) + (h.unit ? ' ' + recEsc(h.unit) : ''), h.avgCost ? 'avg cost ' + fmtMoney(h.avgCost) : ''],
-      ['Value', fmtMoney(h.value), h.priced ? fmtMoney(h.currentPrice || 0) + ' / unit' + (h.priceDate ? ' · ' + fmtDate(h.priceDate) : '') : 'no price yet — at cost'],
+      ['Value', fmtMoney(h.value), isPlaceholderPrice(h) ? 'at your purchase price' : h.priced ? fmtMoney(h.currentPrice || 0) + ' / unit' + (h.priceDate ? ' · ' + fmtDate(h.priceDate) : '') +
+        (h.priceSource === 'manual' ? ' · typed by you' : '') : 'no price yet — at cost'],
       ['Unrealised', plHtml(h.unrealized, h.cost), 'cost ' + fmtMoney(h.cost)],
       ['Realised', plHtml(h.realized, 0), 'from sales'],
       ['Dividends', fmtMoney(h.dividends), h.taxWithheld ? 'after ' + fmtMoney(h.taxWithheld) + ' tax' : 'after tax'],
@@ -196,7 +208,7 @@ function openHolding(id) {
   var priceLabel = asset ? 'Current value (฿)' : 'Current price per ' + (h.unit ? recEsc(h.unit.replace(/s$/, '')) : 'unit') + ' (฿)';
   document.getElementById('hd-body').innerHTML = '<div class="hd-grid">' + stats.map(function(x) {
       return '<div class="hd-stat"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div>' + (x[2] ? '<div class="s">' + x[2] + '</div>' : '') + '</div>';
-    }).join('') + '</div>' + lockBoxHtml(h) +
+    }).join('') + '</div>' + placeholderNoteHtml(h) + lockBoxHtml(h) +
     (h.quantity > 0 ? '<div class="hd-price"><div class="form-group"><label class="form-label">' + priceLabel + '</label>' +
       '<input type="number" class="form-control" id="hd-price" inputmode="decimal" step="any" value="' + (asset ? (h.value || '') : (h.currentPrice || '')) + '"></div>' +
       '<button class="btn btn-primary btn-sm" style="width:auto" onclick="updateHoldingPrice()">Update</button></div>' : '') +

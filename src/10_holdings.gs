@@ -84,13 +84,14 @@ function lockedLots(mine, today) {
 }
 
 function holdingsData() {
-  var txns = holdingTxnRows(), today = todayStr(), firstBuy = firstBuyDates(txns);
+  var txns = holdingTxnRows(), today = todayStr(), firstBuy = firstBuyDates(txns), failed = priceFailures();
   var holdings = sheetToRows(getSheet(SHEET.HOLDINGS), function(d, ri) {
     var kind = String(d[2] || "other");
     return { rowIndex: ri, id: String(d[0] || ""), name: String(d[1] || ""), kind: kind,
       group: HOLDING_KINDS[kind] || "asset", symbol: String(d[3] || ""), unit: String(d[4] || ""),
       currentPrice: toFloat(d[5]), priceDate: formatDate(d[6]), note: String(d[7] || ""),
-      status: String(d[8] || "active"), quoteCurrency: String(d[9] || ""), nextXD: formatDate(d[10]), nextDividend: toFloat(d[11]) };
+      status: String(d[8] || "active"), quoteCurrency: String(d[9] || ""), nextXD: formatDate(d[10]), nextDividend: toFloat(d[11]),
+      priceSource: String(d[12] || "") };
   });
   var totals = { value: 0, cost: 0, unrealized: 0, realized: 0, dividends: 0, investments: 0, assets: 0 };
   holdings.forEach(function(h) {
@@ -108,7 +109,8 @@ function holdingsData() {
       } else if (t.type === "dividend") dividends += t.amount;
     });
     var price = h.currentPrice || lastPrice;
-    h.quantity = Math.round(qty * 1e6) / 1e6;
+    h.priceSource = priceSourceOf(h, mine, lastPrice);
+    h.priceError = h.priceSource === "trade" ? (failed[h.id] || "") : "";    h.quantity = Math.round(qty * 1e6) / 1e6;
     h.cost = round2(cost);
     h.avgCost = qty > 0 ? round2(cost / qty) : 0;
     h.value = round2(price ? qty * price : cost);
@@ -133,6 +135,28 @@ function holdingsData() {
   return { ok: true, holdings: holdings, totals: totals };
 }
 
+// ── Where the current price came from ──
+// Holdings column 13, PriceSource: "market" (a price refresh, or a fund switch's value), "manual" (typed in the app)
+// or "trade" (copied from your latest buy or sale: only a placeholder until a refresh finds a market price).
+// The app labels a "trade" price, so a purchase price is never mistaken for today's market price.
+var PRICE_SOURCE_COL = 13;
+function setPriceSource(sh, row, src) {
+  ensureHeaders(sh, 10, ["QuoteCurrency", "NextXD", "NextDividend", "PriceSource"]);
+  sh.getRange(row, PRICE_SOURCE_COL).setValue(src);
+}
+// Rows saved before the column existed: a price equal to a buy/sale on the price's own date came from that trade.
+function priceSourceOf(h, mine, lastPrice) {
+  if (h.priceSource) return h.priceSource;
+  if (!h.currentPrice) return lastPrice ? "trade" : "";             // no price saved: the value uses the last trade
+  var fromTrade = mine.some(function(t) {
+    return t.type !== "dividend" && t.date === h.priceDate && Math.abs(toFloat(t.price) - h.currentPrice) < 1e-6;
+  });
+  return fromTrade ? "trade" : "";
+}
+// Why the last price refresh found no price, per holding id (Script Property PRICE_FAILED, rebuilt by each refresh).
+function priceFailures() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty("PRICE_FAILED") || "{}") || {}; } catch (e) { return {}; }
+}
 function holdingFields(p) {
   var kind = HOLDING_KINDS[p.kind] ? p.kind : "other";
   return { name: String(p.name || "").trim(), kind: kind, symbol: String(p.symbol || "").trim().toUpperCase(),
@@ -144,6 +168,7 @@ function addHolding(p) {
   var sh = getSheet(SHEET.HOLDINGS), id = p.id || newId("H"), r = sh.getLastRow() + 1;
   sh.getRange(r, 7).setNumberFormat("@");
   sh.getRange(r, 1, 1, 9).setValues([[id, f.name, f.kind, f.symbol, f.unit, f.price || "", f.price ? todayStr() : "", f.note, "active"]]);
+  if (f.price) setPriceSource(sh, r, "manual");
   return jsonResponse({ ok: true, id: id });
 }
 function updateHolding(p) {
@@ -155,6 +180,7 @@ function updateHolding(p) {
   sh.getRange(row, 7).setNumberFormat("@");
   sh.getRange(row, 2, 1, 7).setValues([[f.name, f.kind, f.symbol, f.unit, f.price || "",
     priceChanged ? (p.priceDate || todayStr()) : cur[6], f.note]]);
+  if (priceChanged) setPriceSource(sh, row, "manual");
   if (p.nextXD !== undefined || p.nextDividend !== undefined) {      // expected next dividend (you type it in)
     ensureHeaders(sh, 10, ["QuoteCurrency", "NextXD", "NextDividend"]);
     sh.getRange(row, 11).setNumberFormat("@");
@@ -242,6 +268,7 @@ function addHoldingTxn(p) {
     var hs = getSheet(SHEET.HOLDINGS), hrow = resolveRow(SHEET.HOLDINGS, { id: holdingId });
     hs.getRange(hrow, 7).setNumberFormat("@");
     hs.getRange(hrow, 6, 1, 2).setValues([[price, date]]);
+    setPriceSource(hs, hrow, "trade");                // a placeholder until a refresh finds the market price
   }
   return jsonResponse({ ok: true, id: id, holdingId: holdingId, lockUntil: lockUntil });
 }
